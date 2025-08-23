@@ -250,7 +250,7 @@ const CamerasScreen = () => {
           }}
           cacheKey={`camera-${camera.uri}-${camera.name}`}
           style={styles.backgroundImage}
-          resizeMode="cover"
+          resizeMode="stretch"
         />
 
         {shouldShowVideos && !videoErrors.get(camera.uri) && (
@@ -261,7 +261,7 @@ const CamerasScreen = () => {
               shouldPlay={true}
               isLooping
               isMuted
-              resizeMode={ResizeMode.COVER}
+              resizeMode={ResizeMode.STRETCH}
               onError={() => handleVideoError(camera.uri)}
             />
           </Pressable>
