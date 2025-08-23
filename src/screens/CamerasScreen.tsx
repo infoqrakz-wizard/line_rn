@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   View,
   StyleSheet,
@@ -11,11 +11,13 @@ import {
   Pressable,
   Modal,
   Platform,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { RouteProp } from "@react-navigation/native";
 import { Video, ResizeMode } from "expo-av";
-import { Image } from "expo-image";
+import CachedImage from "expo-cached-image";
 import { Button, Card, Icon, Switch } from "react-native-paper";
 import { useServerStore } from "../store/serverStore";
 import {
@@ -36,7 +38,7 @@ const CamerasScreen = () => {
   const route = useRoute<CamerasScreenRouteProp>();
   const { serverId } = route.params;
   const navigation = useNavigation();
-  const { top } = useSafeAreaInsets();
+  const { top, bottom } = useSafeAreaInsets();
 
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,13 +46,18 @@ const CamerasScreen = () => {
   const [videoErrors, setVideoErrors] = useState<Map<string, boolean>>(
     new Map()
   );
-  const [visibleCameras, setVisibleCameras] = useState<Set<string>>(new Set());
-  const [playingCameras, setPlayingCameras] = useState<Set<string>>(new Set());
   const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isPortrait, setIsPortrait] = useState(
     Dimensions.get("window").height < Dimensions.get("window").width
   );
+
+  const [isScrolling, setIsScrolling] = useState(false);
+  const [shouldShowVideos, setShouldShowVideos] = useState(true);
+  const lastScrollTime = useRef(Date.now());
+  const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  const ITEM_HEIGHT = (Dimensions.get("screen").height - bottom - top) / 2; // Половина экрана
 
   const server = useServerStore((state) => state.getServer(serverId));
   const updateStreamFormat = useServerStore(
@@ -62,7 +69,12 @@ const CamerasScreen = () => {
       setIsPortrait(window.height < window.width);
     });
 
-    return () => subscription?.remove();
+    return () => {
+      subscription?.remove();
+      if (scrollTimeout.current) {
+        clearTimeout(scrollTimeout.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -108,24 +120,72 @@ const CamerasScreen = () => {
     });
   };
 
-  const onViewableItemsChanged = ({
-    viewableItems,
-  }: {
-    viewableItems: ViewToken[];
-  }) => {
-    const currentVisible = new Set(
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const currentTime = Date.now();
+      const deltaTime = currentTime - lastScrollTime.current;
+
+      if (deltaTime > 16) {
+        if (!isScrolling) {
+          setIsScrolling(true);
+        }
+
+        if (scrollTimeout.current) {
+          clearTimeout(scrollTimeout.current);
+        }
+
+        scrollTimeout.current = setTimeout(() => {
+          setIsScrolling(false);
+          setShouldShowVideos(true);
+        }, 200);
+
+        lastScrollTime.current = currentTime;
+      }
+    },
+    [shouldShowVideos]
+  );
+
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      const allVisibleCameras = new Set<string>();
       viewableItems
         .filter((item) => item.isViewable)
-        .map((item) => (item.item as Camera).uri)
-    );
+        .forEach((item) => {
+          const camera = item.item as Camera;
+          allVisibleCameras.add(camera.uri);
+        });
 
-    setVisibleCameras(currentVisible);
+      if (shouldShowVideos && !isScrolling) {
+        const visibleCameraIndices = viewableItems
+          .filter((item) => item.isViewable)
+          .map((item) => item.index!)
+          .filter((index) => index !== null);
 
-    const visibleArray = Array.from(currentVisible);
-    const newPlayingCameras = new Set(visibleArray.slice(0, 4));
+        const cameraIndicesToLoad = new Set<number>();
 
-    setPlayingCameras(newPlayingCameras);
-  };
+        visibleCameraIndices.forEach((index) => {
+          cameraIndicesToLoad.add(index);
+        });
+
+        const camerasToPlay = new Set<string>();
+        Array.from(cameraIndicesToLoad).forEach((cameraIndex) => {
+          if (cameras[cameraIndex]) {
+            camerasToPlay.add(cameras[cameraIndex].uri);
+          }
+        });
+      }
+    },
+    [shouldShowVideos, isScrolling, cameras]
+  );
+
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 40,
+    minimumViewTime: 50,
+    waitForInteraction: false,
+  });
+
+  const onViewableItemsChangedRef = useRef(onViewableItemsChanged);
+  onViewableItemsChangedRef.current = onViewableItemsChanged;
 
   const openFullscreen = (camera: Camera) => {
     setSelectedCamera(camera);
@@ -174,55 +234,59 @@ const CamerasScreen = () => {
     item: Camera;
     index: number;
   }) => {
-    const shouldPlayVideo =
-      playingCameras.has(camera.uri) && !videoErrors.get(camera.uri);
-
-    const containerWidth = isPortrait ? "49%" : "100%";
-    const containerHeight = isPortrait
-      ? Dimensions.get("window").height
-      : Dimensions.get("window").height / 2;
-
+    console.log(camera);
     return (
-      <View style={[styles.cameraWrapper, { width: containerWidth }]}>
-        <View style={[styles.cameraContainer, { height: containerHeight }]}>
-          <Image
-            source={{ uri: buildImageUrl(server!, camera) }}
-            style={styles.backgroundImage}
-            contentFit="fill"
-          />
-          {!videoErrors.get(camera.uri) ? (
-            <Pressable onPress={() => openFullscreen(camera)}>
-              <Video
-                source={{ uri: buildStreamingUrl(server!, camera) }}
-                style={[styles.video, { height: containerHeight }]}
-                shouldPlay={shouldPlayVideo}
-                isLooping
-                isMuted
-                resizeMode={ResizeMode.STRETCH}
-                onError={() => handleVideoError(camera.uri)}
-              />
-            </Pressable>
-          ) : (
-            <View style={styles.errorOverlay}>
-              <Card style={styles.errorCard}>
-                <Card.Content style={styles.errorContent}>
-                  <Text style={styles.errorTitle}>Ошибка загрузки видео</Text>
-                  <Text style={styles.errorDescription}>
-                    Не удалось загрузить видеопоток с камеры
-                  </Text>
-                  <Button
-                    mode="contained"
-                    onPress={() => retryVideo(camera.uri)}
-                    style={styles.retryButton}
-                    labelStyle={styles.retryButtonText}
-                  >
-                    Повторить
-                  </Button>
-                </Card.Content>
-              </Card>
-            </View>
-          )}
-        </View>
+      <View
+        style={[
+          styles.cameraContainer,
+          { height: ITEM_HEIGHT },
+          isPortrait && styles.cameraContainerPortrait,
+        ]}
+      >
+        <CachedImage
+          source={{
+            uri: buildImageUrl(server!, camera),
+            expiresIn: 600,
+          }}
+          cacheKey={`camera-${camera.uri}-${camera.name}`}
+          style={styles.backgroundImage}
+          resizeMode="cover"
+        />
+
+        {shouldShowVideos && !videoErrors.get(camera.uri) && (
+          <Pressable onPress={() => openFullscreen(camera)}>
+            <Video
+              source={{ uri: buildStreamingUrl(server!, camera) }}
+              style={[styles.video]}
+              shouldPlay={true}
+              isLooping
+              isMuted
+              resizeMode={ResizeMode.COVER}
+              onError={() => handleVideoError(camera.uri)}
+            />
+          </Pressable>
+        )}
+
+        {videoErrors.get(camera.uri) && (
+          <View style={styles.errorOverlay}>
+            <Card style={styles.errorCard}>
+              <Card.Content style={styles.errorContent}>
+                <Text style={styles.errorTitle}>Ошибка загрузки видео</Text>
+                <Text style={styles.errorDescription}>
+                  Не удалось загрузить видеопоток с камеры
+                </Text>
+                <Button
+                  mode="contained"
+                  onPress={() => retryVideo(camera.uri)}
+                  style={styles.retryButton}
+                  labelStyle={styles.retryButtonText}
+                >
+                  Повторить
+                </Button>
+              </Card.Content>
+            </Card>
+          </View>
+        )}
       </View>
     );
   };
@@ -286,21 +350,26 @@ const CamerasScreen = () => {
 
         <FlatList
           data={cameras}
-          renderItem={renderCameraItem}
           keyExtractor={keyExtractor}
-          numColumns={isPortrait ? 2 : 1}
-          key={isPortrait ? "portrait" : "landscape"}
+          renderItem={renderCameraItem}
+          decelerationRate={0.95}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-          columnWrapperStyle={isPortrait ? styles.row : undefined}
-          onViewableItemsChanged={onViewableItemsChanged}
-          viewabilityConfig={{
-            itemVisiblePercentThreshold: 30,
-            minimumViewTime: 100,
-          }}
+          onViewableItemsChanged={onViewableItemsChangedRef.current}
+          viewabilityConfig={viewabilityConfig.current}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           removeClippedSubviews={true}
-          maxToRenderPerBatch={6}
-          windowSize={10}
+          maxToRenderPerBatch={2}
+          windowSize={3}
+          initialNumToRender={2}
+          getItemLayout={(_, index) => ({
+            length: ITEM_HEIGHT,
+            offset: ITEM_HEIGHT * index,
+            index,
+          })}
+          pagingEnabled={false}
+          snapToAlignment="start"
+          snapToOffsets={cameras.map((_, index) => index * ITEM_HEIGHT)}
         />
       </SafeAreaView>
 
@@ -365,24 +434,28 @@ const styles = StyleSheet.create({
     textAlign: "center",
     margin: 20,
   },
-  scrollView: {
+  groupContainer: {
     flex: 1,
   },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  cameraWrapper: {
-    margin: 2,
-  },
-  row: {
+  groupContainerPortrait: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginHorizontal: 2,
+    flexWrap: "wrap",
+    justifyContent: "space-around",
   },
   cameraContainer: {
-    height: Dimensions.get("window").height / 2,
-    width: "100%",
+    flex: 1,
     position: "relative",
+    overflow: "hidden",
+  },
+  cameraContainerPortrait: {
+    width: "50%",
+  },
+  videoContainer: {
+    flex: 1,
+  },
+  video: {
+    width: "100%",
+    height: "100%",
   },
   backgroundImage: {
     position: "absolute",
@@ -390,11 +463,27 @@ const styles = StyleSheet.create({
     left: 0,
     width: "100%",
     height: "100%",
-    opacity: 0.3,
+    opacity: 0.8,
   },
-  video: {
-    width: "100%",
-    height: Dimensions.get("window").height / 2,
+  previewOverlay: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  cameraTitle: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+  scrollHint: {
+    color: "rgba(255, 255, 255, 0.8)",
+    fontSize: 14,
+    textAlign: "center",
   },
   errorOverlay: {
     position: "absolute",
@@ -431,10 +520,6 @@ const styles = StyleSheet.create({
   },
   retryButtonText: {
     fontSize: 16,
-  },
-  separator: {
-    height: 2,
-    backgroundColor: "black",
   },
   modalContainer: {
     flex: 1,

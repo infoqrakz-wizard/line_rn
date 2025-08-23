@@ -34,6 +34,8 @@ const QRScannerScreen = () => {
 
     const serverData = parseQRServerData(data);
 
+    console.log(serverData);
+
     if (serverData) {
       const newServer = createServerFromQR(serverData);
       addServer(newServer);
