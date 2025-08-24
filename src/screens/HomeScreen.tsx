@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, StyleSheet, Alert, FlatList } from "react-native";
 import {
   FAB,
@@ -20,16 +20,25 @@ import { parseQRServerData, createServerFromQR } from "../utils/qrParser";
 import ServerCard from "../components/ServerCard";
 import EditServerModal from "../components/EditServerModal";
 import { RootStackParamList } from "../navigation/AppNavigator";
+import CreateServerModal from "../components/CreateServerModal";
 
 const HomeScreen = () => {
-  const [fabOpen, setFabOpen] = useState(false);
   const [dialogVisible, setDialogVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
+  const [createModalVisible, setCreateModalVisible] = useState(false);
   const [editingServer, setEditingServer] = useState<Server | null>(null);
   const theme = useTheme();
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const { bottom, top } = useSafeAreaInsets();
-  const { servers, addServer, updateServer, removeServer } = useServerStore();
+  const { servers, addServer, updateServer, removeServer, getLastUsedServer } =
+    useServerStore();
+
+  useEffect(() => {
+    const lastUsedServer = getLastUsedServer();
+    if (lastUsedServer) {
+      navigation.navigate("Cameras", { serverId: lastUsedServer });
+    }
+  }, [navigation]);
 
   const handleChooseFromGallery = async () => {
     setDialogVisible(false);
@@ -42,17 +51,14 @@ const HomeScreen = () => {
 
       if (!result.canceled && result.assets[0]) {
         try {
-          // Читаем QR-код из выбранного файла
           const qrResult = await QrImageReader.decode({
             path: result.assets[0].uri,
           });
 
           if (qrResult && qrResult.result) {
-            // Парсим данные QR кода
             const serverData = parseQRServerData(qrResult.result);
 
             if (serverData) {
-              // Создаем сервер и сохраняем его
               const newServer = createServerFromQR(serverData);
               addServer(newServer);
 
@@ -84,6 +90,18 @@ const HomeScreen = () => {
       console.error("Ошибка при выборе файла:", error);
       Alert.alert("Ошибка", "Не удалось выбрать файл");
     }
+  };
+
+  const handleOpenManual = () => {
+    setDialogVisible(false);
+    setCreateModalVisible(true);
+  };
+
+  const handleSaveNewServer = (serverData: Omit<Server, "id">) => {
+    if (serverData) {
+      addServer(serverData);
+    }
+    setCreateModalVisible(false);
   };
 
   const handleOpenCamera = () => {
@@ -133,6 +151,10 @@ const HomeScreen = () => {
   const handleCloseEditModal = () => {
     setEditModalVisible(false);
     setEditingServer(null);
+  };
+
+  const handleCloseCreateModal = () => {
+    setCreateModalVisible(false);
   };
 
   const renderServerCard = ({ item }: { item: Server }) => (
@@ -192,7 +214,7 @@ const HomeScreen = () => {
       </View>
 
       <FAB
-        icon="plus" 
+        icon="plus"
         style={[
           styles.fab,
           { backgroundColor: theme.colors.primary, bottom: bottom },
@@ -204,11 +226,12 @@ const HomeScreen = () => {
         <Dialog visible={dialogVisible} onDismiss={hideDialog}>
           <Dialog.Title>Выберите источник</Dialog.Title>
           <Dialog.Content>
-            <Text>Откуда вы хотите получить QR-код?</Text>
+            <Text>Как вы хотите добавить сервер?</Text>
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={handleChooseFromGallery}>Из галереи</Button>
             <Button onPress={handleOpenCamera}>Камера</Button>
+            <Button onPress={handleOpenManual}>Вручную</Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>
@@ -218,6 +241,12 @@ const HomeScreen = () => {
         server={editingServer}
         onDismiss={handleCloseEditModal}
         onSave={handleSaveEditedServer}
+      />
+
+      <CreateServerModal
+        visible={createModalVisible}
+        onDismiss={handleCloseCreateModal}
+        onSave={handleSaveNewServer}
       />
     </View>
   );

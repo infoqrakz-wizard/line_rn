@@ -12,7 +12,6 @@ export interface Server {
   login: string;
   pass: string;
   createdAt: string;
-  streamFormat?: "mp4" | "m3u8";
 }
 
 interface ServerState {
@@ -21,7 +20,8 @@ interface ServerState {
   updateServer: (id: string, serverData: Partial<Server>) => void;
   removeServer: (id: string) => void;
   getServer: (id: string) => Server | undefined;
-  updateStreamFormat: (id: string, format: "mp4" | "m3u8") => void;
+  saveLastUsedServer: (id: string) => void;
+  getLastUsedServer: () => string | null;
 }
 
 const zustandStorage = {
@@ -45,7 +45,6 @@ export const useServerStore = create<ServerState>()(
         const newServer: Server = {
           ...serverData,
           id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-          streamFormat: serverData.streamFormat || "m3u8",
         };
         set((state) => ({
           servers: [...state.servers, newServer],
@@ -66,12 +65,11 @@ export const useServerStore = create<ServerState>()(
       getServer: (id) => {
         return get().servers.find((server) => server.id === id);
       },
-      updateStreamFormat: (id, format) => {
-        set((state) => ({
-          servers: state.servers.map((server) =>
-            server.id === id ? { ...server, streamFormat: format } : server
-          ),
-        }));
+      saveLastUsedServer: (id: string) => {
+        storage.set("lastUsedServer", id);
+      },
+      getLastUsedServer: () => {
+        return storage.getString("lastUsedServer") ?? null;
       },
     }),
     {

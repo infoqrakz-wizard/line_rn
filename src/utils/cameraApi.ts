@@ -26,6 +26,82 @@ export const createBasicAuthString = (
   return btoa(credentials);
 };
 
+const testUrlConnectivity = async (
+  url: string,
+  port: number,
+  login: string,
+  password: string,
+  timeoutMs: number = 5000
+): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error('Timeout'));
+    }, timeoutMs);
+
+    const controller = new AbortController();
+    const testUrl = `${url}:${port}/cameras`;
+    const authString = createBasicAuthString(login, password);
+    const authParam = `?authorization=Basic%20${encodeURIComponent(authString)}`;
+    const fullUrl = `${testUrl}${authParam}`;
+
+    fetch(fullUrl, {
+      method: 'HEAD',
+      signal: controller.signal,
+      headers: {
+        Accept: 'application/xml',
+      },
+    })
+      .then(response => {
+        clearTimeout(timeoutId);
+        if (response.ok || response.status === 401) {
+          resolve(url);
+        } else {
+          reject(new Error(`HTTP ${response.status}`));
+        }
+      })
+      .catch(error => {
+        clearTimeout(timeoutId);
+        controller.abort();
+        reject(error);
+      });
+  });
+};
+
+export const determineProtocolForUrl = async (
+  url: string,
+  port: number,
+  login: string,
+  password: string
+): Promise<string> => {
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+
+  const httpUrl = `http://${url}`;
+  const httpsUrl = `https://${url}`;
+
+  try {
+    const fasterUrl = await Promise.race([
+      testUrlConnectivity(httpUrl, port, login, password),
+      testUrlConnectivity(httpsUrl, port, login, password),
+    ]);
+    
+    return fasterUrl;
+  } catch (error) {
+    try {
+      await testUrlConnectivity(httpsUrl, port, login, password, 10000);
+      return httpsUrl;
+    } catch {
+      try {
+        await testUrlConnectivity(httpUrl, port, login, password, 10000);
+        return httpUrl;
+      } catch {
+        return httpsUrl;
+      }
+    }
+  }
+};
+
 export const fetchCameraList = async (
   server: Server
 ): Promise<CamerasResponse> => {
@@ -109,14 +185,17 @@ export const fetchCameraList = async (
   }
 };
 
-export const buildStreamingUrl = (server: Server, camera: Camera): string => {
-  const { url, port, login, pass, streamFormat = "m3u8" } = server;
+export const buildStreamingUrl = (
+  server: Server,
+  camera: Camera,
+  isMain: boolean = false
+): string => {
+  const { url, port, login, pass } = server;
   const baseUrl = `${url}:${port}`;
   const authString = createBasicAuthString(login, pass);
-  const fileExtension = streamFormat === "mp4" ? "main.mp4" : "main.m3u8";
-  const authParam = `/${fileExtension}?authorization=Basic%20${encodeURIComponent(
-    authString
-  )}`;
+  const authParam = `/${
+    isMain ? "main" : "sub"
+  }.mp4?authorization=Basic%20${encodeURIComponent(authString)}`;
 
   return `${baseUrl}${camera.streamingUri}${authParam}`;
 };

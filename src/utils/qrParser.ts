@@ -32,7 +32,6 @@ export const generateDefaultServerName = (url: string): string => {
     const urlObj = new URL(url);
     return urlObj.hostname;
   } catch {
-    // Если URL некорректный, извлекаем домен вручную
     const cleanUrl = url.replace(/^https?:\/\//, '');
     const domain = cleanUrl.split('/')[0];
     return domain || 'Сервер';

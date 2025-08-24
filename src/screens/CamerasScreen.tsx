@@ -31,6 +31,12 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
+import { MMKV } from "react-native-mmkv";
+import { ReactNativeZoomableView } from "@openspacelabs/react-native-zoomable-view";
+
+const storage = new MMKV();
+
+const MAX_RETRY_ATTEMPTS = 3;
 
 type CamerasScreenRouteProp = RouteProp<RootStackParamList, "Cameras">;
 
@@ -46,27 +52,57 @@ const CamerasScreen = () => {
   const [videoErrors, setVideoErrors] = useState<Map<string, boolean>>(
     new Map()
   );
+  const [retryAttempts, setRetryAttempts] = useState<Map<string, number>>(
+    new Map()
+  );
   const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isPortrait, setIsPortrait] = useState(
-    Dimensions.get("window").height < Dimensions.get("window").width
+    Dimensions.get("window").height > Dimensions.get("window").width
   );
+  const [zoomContainerSize, setZoomContainerSize] = useState({
+    width: Dimensions.get("window").width,
+    height: Dimensions.get("window").height,
+  });
 
   const [isScrolling, setIsScrolling] = useState(false);
   const [shouldShowVideos, setShouldShowVideos] = useState(true);
   const lastScrollTime = useRef(Date.now());
   const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
 
-  const ITEM_HEIGHT = (Dimensions.get("screen").height - bottom - top) / 2; // Половина экрана
+  const ITEM_HEIGHT = isPortrait
+    ? (Dimensions.get("screen").height - bottom - top) / 2
+    : Dimensions.get("screen").height - bottom - top;
 
   const server = useServerStore((state) => state.getServer(serverId));
-  const updateStreamFormat = useServerStore(
-    (state) => state.updateStreamFormat
+
+  const saveLastUsedServer = useServerStore(
+    (state) => state.saveLastUsedServer
   );
+
+  const groupedCameras = React.useMemo(() => {
+    if (isPortrait) {
+      return cameras.map((camera, index) => ({
+        cameras: [camera],
+        rowIndex: index,
+      }));
+    } else {
+      const groups = [];
+      for (let i = 0; i < cameras.length; i += 2) {
+        const camerasInRow = cameras.slice(i, i + 2);
+        groups.push({ cameras: camerasInRow, rowIndex: Math.floor(i / 2) });
+      }
+      return groups;
+    }
+  }, [cameras, isPortrait]);
 
   useEffect(() => {
     const subscription = Dimensions.addEventListener("change", ({ window }) => {
-      setIsPortrait(window.height < window.width);
+      setIsPortrait(window.height > window.width);
+      setZoomContainerSize({
+        width: window.width,
+        height: window.height,
+      });
     });
 
     return () => {
@@ -91,6 +127,7 @@ const CamerasScreen = () => {
 
         if (response.success) {
           setCameras(response.cameras);
+          saveLastUsedServer(serverId);
         } else {
           setError(response.error || "Ошибка загрузки камер");
         }
@@ -104,21 +141,64 @@ const CamerasScreen = () => {
     loadCameras();
   }, [server]);
 
-  const handleVideoError = (cameraUri: string) => {
-    setVideoErrors((prev) => {
-      const newMap = new Map(prev);
-      newMap.set(cameraUri, true);
-      return newMap;
-    });
-  };
-
-  const retryVideo = (cameraUri: string) => {
+  const retryVideo = useCallback((cameraUri: string) => {
     setVideoErrors((prev) => {
       const newMap = new Map(prev);
       newMap.delete(cameraUri);
       return newMap;
     });
-  };
+  }, []);
+
+  const manualRetryVideo = useCallback((cameraUri: string) => {
+    setVideoErrors((prev) => {
+      const newMap = new Map(prev);
+      newMap.delete(cameraUri);
+      return newMap;
+    });
+
+    setRetryAttempts((prev) => {
+      const newMap = new Map(prev);
+      newMap.delete(cameraUri);
+      return newMap;
+    });
+  }, []);
+
+  const handleVideoLoad = useCallback((cameraUri: string) => {
+    setRetryAttempts((prev) => {
+      const newMap = new Map(prev);
+      newMap.delete(cameraUri);
+      return newMap;
+    });
+  }, []);
+
+  const handleVideoError = useCallback(
+    (cameraUri: string) => {
+      setRetryAttempts((prev) => {
+        const currentAttempts = prev.get(cameraUri) || 0;
+        const newAttempts = currentAttempts + 1;
+
+        if (newAttempts <= MAX_RETRY_ATTEMPTS) {
+          const newMap = new Map(prev);
+          newMap.set(cameraUri, newAttempts);
+
+          setTimeout(() => {
+            retryVideo(cameraUri);
+          }, 1000 * newAttempts);
+
+          return newMap;
+        } else {
+          setVideoErrors((prevErrors) => {
+            const newErrorMap = new Map(prevErrors);
+            newErrorMap.set(cameraUri, true);
+            return newErrorMap;
+          });
+
+          return prev;
+        }
+      });
+    },
+    [retryVideo]
+  );
 
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -151,31 +231,35 @@ const CamerasScreen = () => {
       viewableItems
         .filter((item) => item.isViewable)
         .forEach((item) => {
-          const camera = item.item as Camera;
-          allVisibleCameras.add(camera.uri);
+          const group = item.item as { cameras: Camera[]; rowIndex: number };
+          group.cameras.forEach((camera) => {
+            allVisibleCameras.add(camera.uri);
+          });
         });
 
       if (shouldShowVideos && !isScrolling) {
-        const visibleCameraIndices = viewableItems
+        const visibleGroupIndices = viewableItems
           .filter((item) => item.isViewable)
           .map((item) => item.index!)
           .filter((index) => index !== null);
 
         const cameraIndicesToLoad = new Set<number>();
 
-        visibleCameraIndices.forEach((index) => {
+        visibleGroupIndices.forEach((index) => {
           cameraIndicesToLoad.add(index);
         });
 
         const camerasToPlay = new Set<string>();
-        Array.from(cameraIndicesToLoad).forEach((cameraIndex) => {
-          if (cameras[cameraIndex]) {
-            camerasToPlay.add(cameras[cameraIndex].uri);
+        Array.from(cameraIndicesToLoad).forEach((groupIndex) => {
+          if (groupedCameras[groupIndex]) {
+            groupedCameras[groupIndex].cameras.forEach((camera) => {
+              camerasToPlay.add(camera.uri);
+            });
           }
         });
       }
     },
-    [shouldShowVideos, isScrolling, cameras]
+    [shouldShowVideos, isScrolling, groupedCameras]
   );
 
   const viewabilityConfig = useRef({
@@ -197,52 +281,9 @@ const CamerasScreen = () => {
     setSelectedCamera(null);
   };
 
-  const toggleStreamFormat = () => {
-    if (server) {
-      const newFormat = server.streamFormat === "mp4" ? "m3u8" : "mp4";
-      updateStreamFormat(serverId, newFormat);
-
-      setVideoErrors(new Map());
-
-      const loadCameras = async () => {
-        if (!server) return;
-
-        try {
-          setLoading(true);
-          const response = await fetchCameraList(server);
-
-          if (response.success) {
-            setCameras(response.cameras);
-          } else {
-            setError(response.error || "Ошибка загрузки камер");
-          }
-        } catch (err) {
-          setError("Ошибка подключения к серверу");
-        } finally {
-          setLoading(false);
-        }
-      };
-
-      loadCameras();
-    }
-  };
-
-  const renderCameraItem = ({
-    item: camera,
-    index,
-  }: {
-    item: Camera;
-    index: number;
-  }) => {
-    console.log(camera);
+  const renderSingleCamera = (camera: Camera, containerStyle?: any) => {
     return (
-      <View
-        style={[
-          styles.cameraContainer,
-          { height: ITEM_HEIGHT },
-          isPortrait && styles.cameraContainerPortrait,
-        ]}
-      >
+      <View style={[styles.cameraContainer, containerStyle]}>
         <CachedImage
           source={{
             uri: buildImageUrl(server!, camera),
@@ -254,8 +295,15 @@ const CamerasScreen = () => {
         />
 
         {shouldShowVideos && !videoErrors.get(camera.uri) && (
-          <Pressable onPress={() => openFullscreen(camera)}>
+          <Pressable
+            onPress={() => {
+              if (!retryAttempts.get(camera.uri)) {
+                openFullscreen(camera);
+              }
+            }}
+          >
             <Video
+              key={`${camera.uri}-${retryAttempts.get(camera.uri) || 0}`}
               source={{ uri: buildStreamingUrl(server!, camera) }}
               style={[styles.video]}
               shouldPlay={true}
@@ -263,9 +311,20 @@ const CamerasScreen = () => {
               isMuted
               resizeMode={ResizeMode.STRETCH}
               onError={() => handleVideoError(camera.uri)}
+              onReadyForDisplay={() => handleVideoLoad(camera.uri)}
             />
           </Pressable>
         )}
+
+        {!videoErrors.get(camera.uri) &&
+          retryAttempts.get(camera.uri) &&
+          retryAttempts.get(camera.uri)! > 0 && (
+            <View style={styles.retryIndicator}>
+              <Text style={styles.retryText}>
+                Попытка {retryAttempts.get(camera.uri)}/{MAX_RETRY_ATTEMPTS}
+              </Text>
+            </View>
+          )}
 
         {videoErrors.get(camera.uri) && (
           <View style={styles.errorOverlay}>
@@ -277,7 +336,7 @@ const CamerasScreen = () => {
                 </Text>
                 <Button
                   mode="contained"
-                  onPress={() => retryVideo(camera.uri)}
+                  onPress={() => manualRetryVideo(camera.uri)}
                   style={styles.retryButton}
                   labelStyle={styles.retryButtonText}
                 >
@@ -291,7 +350,37 @@ const CamerasScreen = () => {
     );
   };
 
-  const keyExtractor = (item: Camera) => item.uri;
+  const renderCameraRow = ({
+    item,
+    index,
+  }: {
+    item: { cameras: Camera[]; rowIndex: number };
+    index: number;
+  }) => {
+    const { cameras: camerasInRow } = item;
+
+    if (isPortrait) {
+      return renderSingleCamera(camerasInRow[0], { height: ITEM_HEIGHT });
+    } else {
+      return (
+        <View style={[styles.rowContainer, { height: ITEM_HEIGHT }]}>
+          {camerasInRow[0] &&
+            renderSingleCamera(
+              camerasInRow[0],
+              styles.cameraContainerLandscape
+            )}
+          {camerasInRow[1] &&
+            renderSingleCamera(
+              camerasInRow[1],
+              styles.cameraContainerLandscape
+            )}
+        </View>
+      );
+    }
+  };
+
+  const keyExtractor = (item: { cameras: Camera[]; rowIndex: number }) =>
+    `row-${item.rowIndex}-${item.cameras.map((c) => c.uri).join("-")}`;
 
   if (loading) {
     return (
@@ -310,7 +399,7 @@ const CamerasScreen = () => {
     );
   }
 
-  if (cameras.length === 0) {
+  if (groupedCameras.length === 0) {
     return (
       <SafeAreaView style={styles.centerContainer}>
         <Text style={styles.errorText}>Камеры не найдены</Text>
@@ -323,35 +412,22 @@ const CamerasScreen = () => {
       <SafeAreaView style={styles.container}>
         <StatusBar hidden />
 
-        <Pressable
-          style={[
-            styles.exitButton,
-            { top: Platform.OS === "ios" ? top : top + 10 },
-          ]}
-          onPress={navigation.goBack}
-        >
-          <Icon source="arrow-left" size={24} color="white" />
-        </Pressable>
-
-        <View
-          style={[
-            styles.formatSwitchContainer,
-            { top: Platform.OS === "ios" ? top : top + 10 },
-          ]}
-        >
-          <Text style={styles.formatLabel}>MP4</Text>
-          <Switch
-            value={server?.streamFormat !== "mp4"}
-            onValueChange={toggleStreamFormat}
-            color="#2196F3"
-          />
-          <Text style={styles.formatLabel}>M3U8</Text>
-        </View>
+        {!isModalVisible && (
+          <Pressable
+            style={[
+              styles.exitButton,
+              { top: Platform.OS === "ios" ? top : top + 10 },
+            ]}
+            onPress={navigation.goBack}
+          >
+            <Icon source="arrow-left" size={24} color="white" />
+          </Pressable>
+        )}
 
         <FlatList
-          data={cameras}
+          data={groupedCameras}
           keyExtractor={keyExtractor}
-          renderItem={renderCameraItem}
+          renderItem={renderCameraRow}
           decelerationRate={0.95}
           showsVerticalScrollIndicator={false}
           onViewableItemsChanged={onViewableItemsChangedRef.current}
@@ -369,7 +445,7 @@ const CamerasScreen = () => {
           })}
           pagingEnabled={false}
           snapToAlignment="start"
-          snapToOffsets={cameras.map((_, index) => index * ITEM_HEIGHT)}
+          snapToOffsets={groupedCameras.map((_, index) => index * ITEM_HEIGHT)}
         />
       </SafeAreaView>
 
@@ -378,6 +454,7 @@ const CamerasScreen = () => {
         animationType="fade"
         onRequestClose={closeFullscreen}
         supportedOrientations={["portrait", "landscape"]}
+        presentationStyle="fullScreen"
       >
         <View style={styles.modalContainer}>
           <StatusBar hidden />
@@ -393,18 +470,39 @@ const CamerasScreen = () => {
           </Pressable>
 
           {selectedCamera && (
-            <Video
-              source={{ uri: buildStreamingUrl(server!, selectedCamera) }}
-              style={styles.fullscreenVideo}
-              shouldPlay
-              isLooping
-              isMuted
-              resizeMode={ResizeMode.CONTAIN}
-              onError={() => {
-                handleVideoError(selectedCamera.uri);
-                closeFullscreen();
-              }}
-            />
+            <ReactNativeZoomableView
+              maxZoom={3}
+              minZoom={1}
+              zoomStep={0.25}
+              initialZoom={1}
+              bindToBorders={true}
+              style={[
+                styles.zoomContainer,
+                {
+                  width: zoomContainerSize.width,
+                  height: zoomContainerSize.height,
+                },
+              ]}
+            >
+              <Video
+                key={`fullscreen-${selectedCamera.uri}-${
+                  retryAttempts.get(selectedCamera.uri) || 0
+                }`}
+                source={{
+                  uri: buildStreamingUrl(server!, selectedCamera, true),
+                }}
+                style={styles.fullscreenVideo}
+                shouldPlay
+                isLooping
+                isMuted
+                resizeMode={ResizeMode.CONTAIN}
+                onError={() => {
+                  handleVideoError(selectedCamera.uri);
+                  closeFullscreen();
+                }}
+                onReadyForDisplay={() => handleVideoLoad(selectedCamera.uri)}
+              />
+            </ReactNativeZoomableView>
           )}
         </View>
       </Modal>
@@ -442,13 +540,18 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     justifyContent: "space-around",
   },
+  rowContainer: {
+    flexDirection: "row",
+    width: "100%",
+  },
   cameraContainer: {
     flex: 1,
     position: "relative",
     overflow: "hidden",
   },
-  cameraContainerPortrait: {
+  cameraContainerLandscape: {
     width: "50%",
+    margin: 0,
   },
   videoContainer: {
     flex: 1,
@@ -527,6 +630,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  zoomContainer: {
+    flex: 1,
+  },
   fullscreenVideo: {
     width: "100%",
     height: "100%",
@@ -552,22 +658,20 @@ const styles = StyleSheet.create({
     left: 20,
     zIndex: 1,
   },
-  formatSwitchContainer: {
+  retryIndicator: {
     position: "absolute",
-    right: 10,
-    zIndex: 1,
-    flexDirection: "row",
-    alignItems: "center",
+    bottom: 8,
+    right: 8,
     backgroundColor: "rgba(0, 0, 0, 0.7)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    zIndex: 2,
   },
-  formatLabel: {
+  retryText: {
     color: "white",
     fontSize: 12,
-    fontWeight: "bold",
-    marginHorizontal: 4,
+    fontWeight: "500",
   },
 });
 
