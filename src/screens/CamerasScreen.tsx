@@ -25,16 +25,15 @@ import {
   Camera,
   buildStreamingUrl,
   buildImageUrl,
+  buildArchiveStreamingUrl,
 } from "../utils/cameraApi";
+import Timeline from "../components/Timeline";
 import { RootStackParamList } from "../navigation/AppNavigator";
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import { MMKV } from "react-native-mmkv";
 import { ReactNativeZoomableView } from "@openspacelabs/react-native-zoomable-view";
-
-const storage = new MMKV();
 
 const MAX_RETRY_ATTEMPTS = 3;
 
@@ -69,6 +68,14 @@ const CamerasScreen = () => {
   const [shouldShowVideos, setShouldShowVideos] = useState(true);
   const lastScrollTime = useRef(Date.now());
   const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  const [isLiveMode, setIsLiveMode] = useState(true);
+  const [selectedTime, setSelectedTime] = useState<Date>(new Date());
+
+  const [timelineRange, setTimelineRange] = useState<{
+    start: Date;
+    end: Date;
+  } | null>(null);
 
   const ITEM_HEIGHT = isPortrait
     ? (Dimensions.get("screen").height - bottom - top) / 2
@@ -279,7 +286,74 @@ const CamerasScreen = () => {
   const closeFullscreen = () => {
     setIsModalVisible(false);
     setSelectedCamera(null);
+    setIsLiveMode(true);
   };
+
+  const handleTimeSelect = useCallback((timestamp: Date) => {
+    setSelectedTime(timestamp);
+    setIsLiveMode(false);
+  }, []);
+
+  const handleLivePress = useCallback(() => {
+    setIsLiveMode(true);
+    setSelectedTime(new Date());
+  }, []);
+
+  const handleTimeRangeChange = useCallback(
+    (startTime: Date, endTime: Date) => {
+      setTimelineRange({ start: startTime, end: endTime });
+    },
+    []
+  );
+
+  const getCurrentTimelineDate = (): string => {
+    if (!timelineRange) return "";
+
+    const visibleDuration =
+      timelineRange.end.getTime() - timelineRange.start.getTime();
+    const centerTime = new Date(
+      (timelineRange.start.getTime() + timelineRange.end.getTime()) / 2
+    );
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (visibleDuration <= 24 * 60 * 60 * 1000) {
+      if (centerTime.toDateString() === today.toDateString()) {
+        return "Сегодня";
+      } else if (centerTime.toDateString() === yesterday.toDateString()) {
+        return "Вчера";
+      } else {
+        return centerTime.toLocaleDateString("ru-RU", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "2-digit",
+        });
+      }
+    } else {
+      const startDate = timelineRange.start.toLocaleDateString("ru-RU", {
+        day: "2-digit",
+        month: "2-digit",
+      });
+      const endDate = timelineRange.end.toLocaleDateString("ru-RU", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "2-digit",
+      });
+      return `${startDate} - ${endDate}`;
+    }
+  };
+
+  const getVideoUrl = useCallback(
+    (camera: Camera, isMain: boolean = true) => {
+      if (isLiveMode) {
+        return buildStreamingUrl(server!, camera, isMain);
+      } else {
+        return buildArchiveStreamingUrl(server!, camera, selectedTime, isMain);
+      }
+    },
+    [server, isLiveMode, selectedTime]
+  );
 
   const renderSingleCamera = (camera: Camera, containerStyle?: any) => {
     return (
@@ -487,22 +561,57 @@ const CamerasScreen = () => {
               <Video
                 key={`fullscreen-${selectedCamera.uri}-${
                   retryAttempts.get(selectedCamera.uri) || 0
-                }`}
+                }-${isLiveMode ? "live" : selectedTime.getTime()}`}
                 source={{
-                  uri: buildStreamingUrl(server!, selectedCamera, true),
+                  uri: getVideoUrl(selectedCamera, true),
                 }}
                 style={styles.fullscreenVideo}
                 shouldPlay
-                isLooping
+                isLooping={isLiveMode}
                 isMuted
                 resizeMode={ResizeMode.CONTAIN}
-                onError={() => {
-                  handleVideoError(selectedCamera.uri);
-                  closeFullscreen();
+                onError={(error) => {
+                  console.log(
+                    `Video error in ${isLiveMode ? "live" : "archive"} mode:`,
+                    error
+                  );
+                  if (!isLiveMode) {
+                    handleLivePress();
+                  } else {
+                    handleVideoError(selectedCamera.uri);
+                  }
                 }}
                 onReadyForDisplay={() => handleVideoLoad(selectedCamera.uri)}
               />
             </ReactNativeZoomableView>
+          )}
+
+          {selectedCamera && (
+            <>
+              <View
+                style={[
+                  styles.dateDisplayOverlay,
+                  { top: Platform.OS === "ios" ? top : top + 10 },
+                ]}
+              >
+                <Text style={styles.dateDisplayText}>
+                  {getCurrentTimelineDate()}
+                </Text>
+              </View>
+
+              <View style={styles.timelineWrapper}>
+                <Timeline
+                  camera={selectedCamera}
+                  server={server!}
+                  onTimeSelect={handleTimeSelect}
+                  onLivePress={handleLivePress}
+                  currentTime={selectedTime}
+                  isLive={isLiveMode}
+                  isVisible={isModalVisible}
+                  onTimeRangeChange={handleTimeRangeChange}
+                />
+              </View>
+            </>
           )}
         </View>
       </Modal>
@@ -672,6 +781,29 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 12,
     fontWeight: "500",
+  },
+  timelineWrapper: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 2,
+  },
+  dateDisplayOverlay: {
+    position: "absolute",
+    left: 20,
+    zIndex: 3,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  dateDisplayText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
+    opacity: 0.9,
   },
 });
 
