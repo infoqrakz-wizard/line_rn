@@ -75,10 +75,10 @@ export const Timeline: React.FC<TimelineProps> = ({
     () => new Date()
   );
 
-  // Динамически получаем ширину экрана
-  const [screenWidth, setScreenWidth] = useState(Dimensions.get("window").width);
+  const [screenWidth, setScreenWidth] = useState(
+    Dimensions.get("window").width
+  );
 
-  // Отслеживаем изменения размеров экрана
   useEffect(() => {
     const subscription = Dimensions.addEventListener("change", ({ window }) => {
       setScreenWidth(window.width);
@@ -236,8 +236,8 @@ export const Timeline: React.FC<TimelineProps> = ({
         return;
       }
 
-              const tapX = event.nativeEvent.locationX;
-        const containerWidth = screenWidth - 20;
+      const tapX = event.nativeEvent.locationX;
+      const containerWidth = screenWidth - 20;
 
       const visibleDuration =
         visibleTimeRange.end.getTime() - visibleTimeRange.start.getTime();
@@ -246,9 +246,9 @@ export const Timeline: React.FC<TimelineProps> = ({
         visibleTimeRange.start.getTime() + timeOffset
       );
 
-              onTimeSelect(selectedTime);
-      },
-      [onTimeSelect, error, visibleTimeRange, screenWidth]
+      onTimeSelect(selectedTime);
+    },
+    [onTimeSelect, error, visibleTimeRange, screenWidth]
   );
 
   const renderTimelineBlocks = () => {
@@ -485,7 +485,6 @@ export const Timeline: React.FC<TimelineProps> = ({
 
   return (
     <View style={styles.container}>
-
       <View style={styles.topControls}>
         <Pressable
           style={[styles.liveButton, isLive && styles.liveButtonActive]}
@@ -515,9 +514,7 @@ export const Timeline: React.FC<TimelineProps> = ({
             }
             disabled={intervalIndex >= TIMELINE_INTERVALS.length - 1}
           />
-          <Text style={styles.zoomLabel}>
-            {INTERVAL_NAMES[intervalIndex]}
-          </Text>
+          <Text style={styles.zoomLabel}>{INTERVAL_NAMES[intervalIndex]}</Text>
           <IconButton
             icon="plus"
             size={14}
