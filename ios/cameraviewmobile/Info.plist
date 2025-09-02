@@ -30,6 +30,12 @@
           <string>com.anonymous.cameraviewmobile</string>
         </array>
       </dict>
+      <dict>
+        <key>CFBundleURLSchemes</key>
+        <array>
+          <string>exp+camera-view-mobile</string>
+        </array>
+      </dict>
     </array>
     <key>CFBundleVersion</key>
     <string>1</string>
@@ -46,8 +52,14 @@
     </dict>
     <key>NSCameraUsageDescription</key>
     <string>Разрешить $(PRODUCT_NAME) использовать камеру для сканирования QR-кодов</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Разрешить $(PRODUCT_NAME) использовать локальную сеть</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>Приложению нужен доступ к фотографиям для выбора изображений с QR-кодами</string>
+    <key>UIBackgroundModes</key>
+    <array>
+      <string>audio</string>
+    </array>
     <key>UILaunchStoryboardName</key>
     <string>SplashScreen</string>
     <key>UIRequiredDeviceCapabilities</key>

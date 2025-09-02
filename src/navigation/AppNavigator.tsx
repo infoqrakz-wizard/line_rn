@@ -6,11 +6,13 @@ import { useTheme } from "react-native-paper";
 import HomeScreen from "../screens/HomeScreen";
 import QRScannerScreen from "../screens/QRScannerScreen";
 import CamerasScreen from "../screens/CamerasScreen";
+import RTSPScreen from "../screens/RTSPScreen";
 
 export type RootStackParamList = {
   Home: undefined;
   QRScanner: undefined;
   Cameras: { serverId: string };
+  RTSP: { rtspServerId: string };
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -55,6 +57,14 @@ const AppNavigator = () => {
           component={CamerasScreen}
           options={{
             title: "Камеры",
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="RTSP"
+          component={RTSPScreen}
+          options={{
+            title: "RTSP поток",
             headerShown: false,
           }}
         />

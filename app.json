@@ -49,7 +49,14 @@
           "microphonePermission": false
         }
       ],
-      "expo-av"
+      "expo-av",
+      [
+        "expo-libvlc-player",
+        {
+          "localNetworkPermission": "Разрешить $(PRODUCT_NAME) использовать локальную сеть",
+          "supportsBackgroundPlayback": true
+        }
+      ]
     ]
   }
 }

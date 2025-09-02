@@ -38,10 +38,10 @@ const EditServerModal: React.FC<EditServerModalProps> = ({
   useEffect(() => {
     if (server) {
       setName(server.name);
-      setUrl(server.url);
+      setUrl(server.url ?? '');
       setPort(server.port.toString());
-      setLogin(server.login);
-      setPassword(server.pass);
+      setLogin(server.login ?? '');
+      setPassword(server.pass ?? '');
     }
   }, [server]);
 
@@ -53,7 +53,7 @@ const EditServerModal: React.FC<EditServerModalProps> = ({
       url: url.trim(),
       port: parseInt(port) || 443,
       login: login.trim(),
-      pass: password,
+      pass: password ?? '',
     };
 
     onSave(updatedData);

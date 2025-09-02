@@ -10,11 +10,14 @@ import {
   Divider,
 } from "react-native-paper";
 import { Server } from "../store/serverStore";
+import { RTSPServer } from "../store/rtspStore";
+
+type DisplayServer = (Server & { serverType: 'nvr' }) | (RTSPServer & { serverType: 'rtsp' });
 
 interface ServerCardProps {
-  server: Server;
-  onPress: (server: Server) => void;
-  onEdit: (server: Server) => void;
+  server: DisplayServer;
+  onPress: (server: DisplayServer) => void;
+  onEdit: (server: DisplayServer) => void;
   onDelete: (serverId: string) => void;
 }
 
@@ -100,7 +103,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
         <View style={styles.details}>
           <View style={styles.urlContainer}>
             <IconButton
-              icon="web"
+              icon={server.serverType === "rtsp" ? "video" : "web"}
               size={16}
               iconColor={theme.colors.onSurfaceVariant}
               style={styles.iconButton}
@@ -109,11 +112,13 @@ const ServerCard: React.FC<ServerCardProps> = ({
               variant="bodyMedium"
               style={[styles.url, { color: theme.colors.onSurface }]}
             >
-              {server.url}:{server.port}
+              {server.serverType === "rtsp" 
+                ? (server as RTSPServer).rtspUrl 
+                : `${(server as Server).host || (server as Server).url}:${(server as Server).port}`}
             </Text>
           </View>
 
-          {server.login && (
+          {server.serverType !== "rtsp" && ((server as Server).username || (server as Server).login) && (
             <View style={styles.loginContainer}>
               <IconButton
                 icon="account"
@@ -125,15 +130,35 @@ const ServerCard: React.FC<ServerCardProps> = ({
                 variant="bodySmall"
                 style={{ color: theme.colors.onSurfaceVariant }}
               >
-                {server.login}
+                {(server as Server).username || (server as Server).login}
               </Text>
+            </View>
+          )}
+
+          {server.serverType === "rtsp" && (
+            <View style={styles.typeContainer}>
+              <Chip 
+                icon="video" 
+                mode="outlined" 
+                compact
+                style={styles.typeChip}
+                textStyle={styles.typeChipText}
+              >
+                RTSP поток
+              </Chip>
             </View>
           )}
         </View>
 
         <View style={styles.footer}>
           <Chip mode="outlined" style={styles.chip}>
-            {new Date(server.createdAt).toLocaleDateString("ru-RU")}
+            {server.serverType === "rtsp" 
+              ? new Date((server as RTSPServer).createdAt).toLocaleDateString("ru-RU")
+              : (server as Server).createdAt 
+              ? new Date((server as Server).createdAt!).toLocaleDateString("ru-RU")
+              : server.lastUsed
+              ? new Date(server.lastUsed).toLocaleDateString("ru-RU")
+              : "Недавно добавлен"}
           </Chip>
         </View>
       </Card.Content>
@@ -197,6 +222,15 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   chip: {},
+  typeContainer: {
+    marginTop: 8,
+  },
+  typeChip: {
+    alignSelf: "flex-start",
+  },
+  typeChipText: {
+    fontSize: 11,
+  },
 });
 
 export default ServerCard;

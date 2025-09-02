@@ -7,11 +7,16 @@ const storage = new MMKV();
 export interface Server {
   id: string;
   name: string;
-  url: string;
+  host?: string;
   port: number;
-  login: string;
-  pass: string;
-  createdAt: string;
+  username?: string;
+  password?: string;
+  type?: "nvr" | "rtsp";
+  lastUsed?: number;
+  createdAt?: string;
+  url?: string;
+  login?: string;
+  pass?: string;
 }
 
 interface ServerState {
@@ -22,6 +27,7 @@ interface ServerState {
   getServer: (id: string) => Server | undefined;
   saveLastUsedServer: (id: string) => void;
   getLastUsedServer: () => string | null;
+  getLastUsedServerTime: () => number | null;
 }
 
 const zustandStorage = {
@@ -66,10 +72,16 @@ export const useServerStore = create<ServerState>()(
         return get().servers.find((server) => server.id === id);
       },
       saveLastUsedServer: (id: string) => {
+        const now = Date.now();
         storage.set("lastUsedServer", id);
+        storage.set("lastUsedServerTime", now.toString());
       },
       getLastUsedServer: () => {
         return storage.getString("lastUsedServer") ?? null;
+      },
+      getLastUsedServerTime: () => {
+        const time = storage.getString("lastUsedServerTime");
+        return time ? parseInt(time, 10) : null;
       },
     }),
     {
