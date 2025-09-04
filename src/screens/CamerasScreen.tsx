@@ -18,7 +18,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { RouteProp } from "@react-navigation/native";
 import { Video, ResizeMode } from "expo-av";
 import CachedImage from "expo-cached-image";
-import { Button, Card, Icon, Switch } from "react-native-paper";
+import { Button, Card, Icon } from "react-native-paper";
 import { useServerStore } from "../store/serverStore";
 import {
   fetchCameraList,
@@ -71,6 +71,8 @@ const CamerasScreen = () => {
 
   const [isLiveMode, setIsLiveMode] = useState(true);
   const [selectedTime, setSelectedTime] = useState<Date>(new Date());
+  // Anchor time for archive playback start (used to derive current playback time without remounting video)
+  const archiveStartTimeRef = useRef<Date | null>(null);
 
   const [timelineRange, setTimelineRange] = useState<{
     start: Date;
@@ -290,13 +292,17 @@ const CamerasScreen = () => {
   };
 
   const handleTimeSelect = useCallback((timestamp: Date) => {
+    // When user selects a new time, set anchor and switch to archive mode
+    archiveStartTimeRef.current = timestamp;
     setSelectedTime(timestamp);
     setIsLiveMode(false);
   }, []);
 
   const handleLivePress = useCallback(() => {
     setIsLiveMode(true);
-    setSelectedTime(new Date());
+    const now = new Date();
+    archiveStartTimeRef.current = now;
+    setSelectedTime(now);
   }, []);
 
   const handleTimeRangeChange = useCallback(
@@ -305,44 +311,6 @@ const CamerasScreen = () => {
     },
     []
   );
-
-  const getCurrentTimelineDate = (): string => {
-    if (!timelineRange) return "";
-
-    const visibleDuration =
-      timelineRange.end.getTime() - timelineRange.start.getTime();
-    const centerTime = new Date(
-      (timelineRange.start.getTime() + timelineRange.end.getTime()) / 2
-    );
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (visibleDuration <= 24 * 60 * 60 * 1000) {
-      if (centerTime.toDateString() === today.toDateString()) {
-        return "Сегодня";
-      } else if (centerTime.toDateString() === yesterday.toDateString()) {
-        return "Вчера";
-      } else {
-        return centerTime.toLocaleDateString("ru-RU", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "2-digit",
-        });
-      }
-    } else {
-      const startDate = timelineRange.start.toLocaleDateString("ru-RU", {
-        day: "2-digit",
-        month: "2-digit",
-      });
-      const endDate = timelineRange.end.toLocaleDateString("ru-RU", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "2-digit",
-      });
-      return `${startDate} - ${endDate}`;
-    }
-  };
 
   const getVideoUrl = useCallback(
     (camera: Camera, isMain: boolean = true) => {
@@ -524,82 +492,78 @@ const CamerasScreen = () => {
       </SafeAreaView>
 
       <Modal
-        visible={isModalVisible}
+        visible={Boolean(isModalVisible && selectedCamera)}
         animationType="fade"
         onRequestClose={closeFullscreen}
         supportedOrientations={["portrait", "landscape"]}
         presentationStyle="fullScreen"
       >
-        <View style={styles.modalContainer}>
+        <View style={[styles.cameraContainer, { height: ITEM_HEIGHT }]}>
           <StatusBar hidden />
 
           <Pressable
             style={[
-              styles.closeButton,
+              styles.exitButton,
               { top: Platform.OS === "ios" ? top : top + 10 },
             ]}
             onPress={closeFullscreen}
           >
-            <Text style={styles.closeButtonText}>✕</Text>
+            <Icon source="arrow-left" size={24} color="white" />
           </Pressable>
 
           {selectedCamera && (
-            <ReactNativeZoomableView
-              maxZoom={3}
-              minZoom={1}
-              zoomStep={0.25}
-              initialZoom={1}
-              bindToBorders={true}
+            <View
               style={[
-                styles.zoomContainer,
-                {
-                  width: zoomContainerSize.width,
-                  height: zoomContainerSize.height,
-                },
+                styles.modalContent,
+                isPortrait ? styles.modalContentPortrait : styles.modalContentLandscape,
               ]}
             >
-              <Video
-                key={`fullscreen-${selectedCamera.uri}-${
-                  retryAttempts.get(selectedCamera.uri) || 0
-                }-${isLiveMode ? "live" : selectedTime.getTime()}`}
-                source={{
-                  uri: getVideoUrl(selectedCamera, true),
-                }}
-                style={styles.fullscreenVideo}
-                shouldPlay
-                isLooping={isLiveMode}
-                isMuted
-                resizeMode={ResizeMode.CONTAIN}
-                onError={(error) => {
-                  console.log(
-                    `Video error in ${isLiveMode ? "live" : "archive"} mode:`,
-                    error
-                  );
-                  if (!isLiveMode) {
-                    handleLivePress();
-                  } else {
-                    handleVideoError(selectedCamera.uri);
-                  }
-                }}
-                onReadyForDisplay={() => handleVideoLoad(selectedCamera.uri)}
-              />
-            </ReactNativeZoomableView>
-          )}
-
-          {selectedCamera && (
-            <>
-              <View
-                style={[
-                  styles.dateDisplayOverlay,
-                  { top: Platform.OS === "ios" ? top : top + 10 },
-                ]}
-              >
-                <Text style={styles.dateDisplayText}>
-                  {getCurrentTimelineDate()}
-                </Text>
+              <View style={isPortrait ? { flex: 1 } : styles.videoPaneLandscape}>
+                <ReactNativeZoomableView
+                  maxZoom={3}
+                  minZoom={1}
+                  zoomStep={0.25}
+                  initialZoom={1}
+                  bindToBorders={true}
+                  style={styles.zoomContainer}
+                >
+                  <Video
+                    key={`fullscreen-${selectedCamera.uri}-${retryAttempts.get(selectedCamera.uri) || 0}-${isLiveMode ? "live" : "archive"}`}
+                    source={{
+                      uri: getVideoUrl(selectedCamera, true),
+                    }}
+                    style={[styles.video]}
+                    shouldPlay
+                    isLooping={isLiveMode}
+                    isMuted
+                    resizeMode={ResizeMode.COVER}
+                    onPlaybackStatusUpdate={(status) => {
+                      // Derive current archive playback time to drive the timeline
+                      if (!isLiveMode && status && (status as any).isLoaded) {
+                        const s: any = status;
+                        if (typeof s.positionMillis === 'number' && archiveStartTimeRef.current) {
+                          const currentTs = new Date(archiveStartTimeRef.current.getTime() + s.positionMillis);
+                          setSelectedTime(currentTs);
+                        }
+                      }
+                    }}
+                    onError={(error) => {
+                      console.log(
+                        `Video error in ${isLiveMode ? "live" : "archive"} mode:`,
+                        error
+                      );
+                      if (!isLiveMode) {
+                        handleLivePress();
+                      } else {
+                        handleVideoError(selectedCamera.uri);
+                      }
+                    }}
+                    onReadyForDisplay={() => handleVideoLoad(selectedCamera.uri)}
+                  />
+                </ReactNativeZoomableView>
               </View>
 
-              <View style={styles.timelineWrapper}>
+              <View style={isPortrait ? styles.timelineWrapper : styles.timelineWrapperLandscape}>
                 <Timeline
                   camera={selectedCamera}
                   server={server!}
@@ -609,9 +573,10 @@ const CamerasScreen = () => {
                   isLive={isLiveMode}
                   isVisible={isModalVisible}
                   onTimeRangeChange={handleTimeRangeChange}
+                  orientation={isPortrait ? "horizontal" : "vertical"}
                 />
               </View>
-            </>
+            </View>
           )}
         </View>
       </Modal>
@@ -657,6 +622,9 @@ const styles = StyleSheet.create({
     flex: 1,
     position: "relative",
     overflow: "hidden",
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#333333",
   },
   cameraContainerLandscape: {
     width: "50%",
@@ -736,15 +704,19 @@ const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
     backgroundColor: "black",
-    justifyContent: "center",
-    alignItems: "center",
+    // justifyContent: "center",
+    // alignItems: "center",
   },
   zoomContainer: {
     flex: 1,
   },
   fullscreenVideo: {
     width: "100%",
-    height: "100%",
+    minHeight: 100,
+    marginTop: 120,
+    display: "flex",
+    justifyContent: "flex-start",
+    alignItems: "flex-start",
   },
   closeButton: {
     position: "absolute",
@@ -783,27 +755,24 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   timelineWrapper: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
+    flex: 1,
     zIndex: 2,
   },
-  dateDisplayOverlay: {
-    position: "absolute",
-    left: 20,
-    zIndex: 3,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  modalContent: {
+    flex: 1,
   },
-  dateDisplayText: {
-    color: "white",
-    fontSize: 14,
-    fontWeight: "600",
-    textAlign: "center",
-    opacity: 0.9,
+  modalContentPortrait: {
+    flexDirection: "column",
+  },
+  modalContentLandscape: {
+    flexDirection: "row",
+  },
+  videoPaneLandscape: {
+    flex: 1,
+  },
+  timelineWrapperLandscape: {
+    width: 120,
+    zIndex: 2,
   },
 });
 

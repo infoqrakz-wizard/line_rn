@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import {
   View,
   StyleSheet,
@@ -6,8 +6,12 @@ import {
   Text,
   Pressable,
   GestureResponderEvent,
+  ViewStyle,
+  StyleProp,
 } from "react-native";
-import { Button, ActivityIndicator, IconButton } from "react-native-paper";
+import { Button } from "react-native-paper";
+import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
+import { runOnJS } from "react-native-reanimated";
 import {
   fetchArchiveTimeline,
   getTimelineRequest,
@@ -29,21 +33,11 @@ interface TimelineProps {
   isLive: boolean;
   isVisible: boolean;
   onTimeRangeChange?: (startTime: Date, endTime: Date) => void;
+  orientation?: "horizontal" | "vertical";
 }
 
-const TIMELINE_HEIGHT = 100;
 const BUFFER_MULTIPLIER = 2;
-
-const INTERVAL_NAMES = [
-  "5 мин",
-  "10 мин",
-  "15 мин",
-  "30 мин",
-  "1 час",
-  "4 часа",
-  "6 часов",
-  "1 день",
-];
+const VERTICAL_BLOCK_WIDTH = 56;
 
 export const Timeline: React.FC<TimelineProps> = ({
   camera,
@@ -54,6 +48,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   isLive,
   isVisible,
   onTimeRangeChange,
+  orientation = "horizontal",
 }) => {
   const [timelineData, setTimelineData] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
@@ -79,15 +74,41 @@ export const Timeline: React.FC<TimelineProps> = ({
     Dimensions.get("window").width
   );
 
+  const initialWindow = Dimensions.get("window");
+  const [timelineHeight, setTimelineHeight] = useState(
+    orientation === "vertical"
+      ? initialWindow.height
+      : 120
+  );
+
+  const [isPanning, setIsPanning] = useState(false);
+  const [contentSize, setContentSize] = useState({ width: 0, height: 0 });
+  const isPanningRef = useRef(false);
+  const panStartRef = useRef<TimeRange | null>(null);
+  const bufferUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     const subscription = Dimensions.addEventListener("change", ({ window }) => {
       setScreenWidth(window.width);
+      const isPortrait = window.height >= window.width;
+      setTimelineHeight(
+        orientation === "vertical"
+          ? window.height
+          : isPortrait
+          ? 200
+          : window.height / 2
+      );
     });
 
     return () => {
       subscription?.remove();
+      if (bufferUpdateTimeoutRef.current) {
+        clearTimeout(bufferUpdateTimeoutRef.current);
+      }
     };
-  }, []);
+  }, [orientation]);
+
+  const isVertical = orientation === "vertical";
 
   const initializeTimeline = useCallback(async () => {
     if (!isVisible || serverTime) return;
@@ -132,6 +153,25 @@ export const Timeline: React.FC<TimelineProps> = ({
           bufferedTimeRange.start <= bufferStart &&
           bufferedTimeRange.end >= bufferEnd
         ) {
+          return;
+        }
+      }
+
+      if (isLive && bufferedTimeRange) {
+        const screenDuration = endTime.getTime() - startTime.getTime();
+        const bufferStart = new Date(
+          startTime.getTime() - screenDuration * BUFFER_MULTIPLIER
+        );
+        const bufferEnd = new Date(
+          endTime.getTime() + screenDuration * BUFFER_MULTIPLIER
+        );
+
+        const overlapStart = Math.max(bufferStart.getTime(), bufferedTimeRange.start.getTime());
+        const overlapEnd = Math.min(bufferEnd.getTime(), bufferedTimeRange.end.getTime());
+        const overlapDuration = Math.max(0, overlapEnd - overlapStart);
+        const newDuration = bufferEnd.getTime() - bufferStart.getTime();
+
+        if (overlapDuration / newDuration > 0.8) {
           return;
         }
       }
@@ -186,7 +226,7 @@ export const Timeline: React.FC<TimelineProps> = ({
         setLoading(false);
       }
     },
-    [camera, server, isVisible, intervalIndex, bufferedTimeRange]
+    [camera, server, isVisible, intervalIndex, bufferedTimeRange, isLive]
   );
 
   useEffect(() => {
@@ -208,6 +248,51 @@ export const Timeline: React.FC<TimelineProps> = ({
     }
   }, [isLive, serverTime, currentTime]);
 
+  const lastAutoCenterBucketRef = useRef<number | null>(null);
+  const lastInteractionRef = useRef<number>(0);
+
+  useEffect(() => {
+    lastAutoCenterBucketRef.current = null;
+  }, [intervalIndex, isLive, isVisible]);
+
+  const markInteraction = useCallback(() => {
+    lastInteractionRef.current = Date.now();
+  }, []);
+
+  useEffect(() => {
+    if (!isVisible || !visibleTimeRange || isPanningRef.current) return;
+
+    if (Date.now() - lastInteractionRef.current < 800) return;
+
+    const visibleDuration =
+      visibleTimeRange.end.getTime() - visibleTimeRange.start.getTime();
+    const unitMs = (UNIT_LENGTHS[intervalIndex] ?? 60) * 1000;
+    const refTime = isLive ? serverTime?.getTime() : currentTime?.getTime();
+    if (!refTime || unitMs <= 0) return;
+
+    const bucket = Math.floor(refTime / unitMs);
+    if (lastAutoCenterBucketRef.current === bucket) return;
+
+    const half = visibleDuration / 2;
+    const start = new Date(refTime - half);
+    const end = new Date(refTime + half);
+
+    setVisibleTimeRange({ start, end });
+    
+    if (isLive && bufferedTimeRange) {
+      const screenDuration = end.getTime() - start.getTime();
+      const bufferStart = new Date(
+        start.getTime() - screenDuration * BUFFER_MULTIPLIER
+      );
+      const bufferEnd = new Date(
+        end.getTime() + screenDuration * BUFFER_MULTIPLIER
+      );
+      setBufferedTimeRange({ start: bufferStart, end: bufferEnd });
+    }
+    
+    lastAutoCenterBucketRef.current = bucket;
+  }, [isLive, currentTime, serverTime, isVisible, visibleTimeRange, intervalIndex, bufferedTimeRange]);
+
   useEffect(() => {
     if (!isLive || !isVisible) return;
 
@@ -224,238 +309,72 @@ export const Timeline: React.FC<TimelineProps> = ({
     return () => clearInterval(interval);
   }, [isLive, isVisible, server]);
 
-  const handleTimelineTap = useCallback(
-    (event: GestureResponderEvent) => {
-      if (
-        error?.includes("не может просматривать архив") ||
-        error?.includes("недоступен на этом сервере") ||
-        error?.includes("Доступен только просмотр LIVE") ||
-        error?.includes("Доступен только LIVE режим") ||
-        !visibleTimeRange
-      ) {
-        return;
+  useEffect(() => {
+    if (!isLive || !isVisible || !serverTime || !bufferedTimeRange) return;
+
+    const currentTime = serverTime.getTime();
+    const bufferStart = bufferedTimeRange.start.getTime();
+    const bufferEnd = bufferedTimeRange.end.getTime();
+    
+    const bufferDuration = bufferEnd - bufferStart;
+    const edgeThreshold = bufferDuration * 0.2;
+    
+    if (currentTime < bufferStart + edgeThreshold || currentTime > bufferEnd - edgeThreshold) {
+      if (visibleTimeRange) {
+        loadTimeline(visibleTimeRange.start, visibleTimeRange.end, intervalIndex);
       }
-
-      const tapX = event.nativeEvent.locationX;
-      const containerWidth = screenWidth - 20;
-
-      const visibleDuration =
-        visibleTimeRange.end.getTime() - visibleTimeRange.start.getTime();
-      const timeOffset = (tapX / containerWidth) * visibleDuration;
-      const selectedTime = new Date(
-        visibleTimeRange.start.getTime() + timeOffset
-      );
-
-      onTimeSelect(selectedTime);
-    },
-    [onTimeSelect, error, visibleTimeRange, screenWidth]
-  );
-
-  const renderTimelineBlocks = () => {
-    if (!visibleTimeRange || !bufferedTimeRange || timelineData.length === 0) {
-      return null;
     }
+  }, [isLive, isVisible, serverTime, bufferedTimeRange, visibleTimeRange, loadTimeline, intervalIndex]);
 
-    const blocks = [];
-    const containerWidth = screenWidth - 20;
-
-    const totalFragments = timelineData.length;
-    const blockWidth = containerWidth / totalFragments;
-
-    const bufferedDuration =
-      bufferedTimeRange.end.getTime() - bufferedTimeRange.start.getTime();
-    const visibleDuration =
-      visibleTimeRange.end.getTime() - visibleTimeRange.start.getTime();
-
-    const startOffset =
-      (visibleTimeRange.start.getTime() - bufferedTimeRange.start.getTime()) /
-      bufferedDuration;
-    const endOffset =
-      (visibleTimeRange.end.getTime() - bufferedTimeRange.start.getTime()) /
-      bufferedDuration;
-
-    const startIndex = Math.max(0, Math.floor(startOffset * totalFragments));
-    const endIndex = Math.min(
-      totalFragments - 1,
-      Math.ceil(endOffset * totalFragments)
-    );
-
-    for (let i = startIndex; i <= endIndex; i++) {
-      const hasArchive = timelineData[i] === 1;
-      const blockLeft =
-        ((i - startIndex) / (endIndex - startIndex + 1)) * containerWidth;
-
-      blocks.push(
-        <View
-          key={i}
-          style={[
-            styles.timelineBlock,
-            {
-              position: "absolute",
-              left: blockLeft,
-              width: Math.max(1, blockWidth),
-              backgroundColor: hasArchive
-                ? "#4CAF50"
-                : "rgba(255, 255, 255, 0.1)",
-            },
-          ]}
-        />
-      );
-    }
-
-    return blocks;
-  };
-
-  const renderTimeLabels = () => {
-    if (!visibleTimeRange) return null;
-
-    const labels = [];
-    const containerWidth = screenWidth - 20;
-    const visibleDuration =
-      visibleTimeRange.end.getTime() - visibleTimeRange.start.getTime();
-
-    let labelInterval: number;
-    if (visibleDuration <= 5 * 60 * 1000) {
-      labelInterval = 1 * 60 * 1000; // каждую минуту
-    } else if (visibleDuration <= 30 * 60 * 1000) {
-      labelInterval = 5 * 60 * 1000; // каждые 5 минут
-    } else if (visibleDuration <= 2 * 60 * 60 * 1000) {
-      labelInterval = 15 * 60 * 1000; // каждые 15 минут
-    } else if (visibleDuration <= 12 * 60 * 60 * 1000) {
-      labelInterval = 60 * 60 * 1000; // каждый час
-    } else {
-      labelInterval = 4 * 60 * 60 * 1000; // каждые 4 часа
-    }
-
-    const startTime = visibleTimeRange.start.getTime();
-    const firstLabelTime = Math.ceil(startTime / labelInterval) * labelInterval;
-
-    for (
-      let time = firstLabelTime;
-      time <= visibleTimeRange.end.getTime();
-      time += labelInterval
-    ) {
-      const labelDate = new Date(time);
-      const position = ((time - startTime) / visibleDuration) * containerWidth;
-
-      const timeString = labelDate.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      });
-
-      const dateString = labelDate.toLocaleDateString([], {
-        day: "2-digit",
-        month: "2-digit",
-      });
-
-      const isMainLabel = labelInterval >= 60 * 60 * 1000;
-
-      labels.push(
-        <View key={time} style={[styles.timeLabel, { left: position - 20 }]}>
-          <Text
-            style={
-              isMainLabel ? styles.timeLabelText : styles.timeLabelTextSmall
-            }
-          >
-            {timeString}
-          </Text>
-          {visibleDuration >= 24 * 60 * 60 * 1000 && (
-            <Text style={styles.dateLabelText}>{dateString}</Text>
-          )}
-          <View
-            style={[
-              styles.timeTick,
-              isMainLabel ? styles.mainTick : styles.subTick,
-            ]}
-          />
-        </View>
-      );
-    }
-    return labels;
-  };
-
-  const renderCurrentTimeIndicator = () => {
-    if (!visibleTimeRange) return null;
-
-    const now = isLive ? currentTimeIndicator : currentTime;
-    const containerWidth = screenWidth - 20;
-    const visibleDuration =
-      visibleTimeRange.end.getTime() - visibleTimeRange.start.getTime();
-
-    const nowTime = now.getTime();
-    if (
-      nowTime < visibleTimeRange.start.getTime() ||
-      nowTime > visibleTimeRange.end.getTime()
-    ) {
-      return null;
-    }
-
-    const timeOffset = nowTime - visibleTimeRange.start.getTime();
-    const leftPosition = (timeOffset / visibleDuration) * containerWidth;
-
-    return (
-      <View style={[styles.currentTimeIndicator, { left: leftPosition }]}>
-        <View style={styles.currentTimeLine} />
-        <View style={styles.currentTimeCircle} />
-        {!isLive && (
-          <Text style={styles.selectedTimeLabel}>
-            {now.getHours().toString().padStart(2, "0")}:
-            {now.getMinutes().toString().padStart(2, "0")}
-          </Text>
-        )}
-      </View>
-    );
-  };
-
-  if (!isVisible) {
-    return null;
-  }
-
-  const isArchiveRestricted =
+  const isArchiveRestricted = Boolean(
     error?.includes("Доступен только просмотр LIVE") ||
     error?.includes("Доступен только LIVE режим") ||
     error?.includes("не может просматривать архив") ||
-    error?.includes("недоступен на этом сервере");
+    error?.includes("недоступен на этом сервере")
+  );
 
-  const goToPreviousInterval = useCallback(() => {
-    if (!visibleTimeRange || !serverTime) return;
+  const handleTimelineTap = useCallback(
+    (event: GestureResponderEvent) => {
+      if (!visibleTimeRange || isArchiveRestricted) return;
 
-    const currentInterval = TIMELINE_INTERVALS[intervalIndex];
-    const newStart = new Date(
-      visibleTimeRange.start.getTime() - currentInterval
-    );
-    const newEnd = new Date(visibleTimeRange.end.getTime() - currentInterval);
+      setTimeout(() => {
+        if (isPanningRef.current) return;
+        lastInteractionRef.current = Date.now();
 
-    setVisibleTimeRange({ start: newStart, end: newEnd });
-    setBufferedTimeRange(null);
-  }, [visibleTimeRange, serverTime, intervalIndex]);
+        const axisLength = isVertical
+          ? Math.max(1, contentSize.height)
+          : Math.max(1, contentSize.width);
+        const tapCoord = isVertical
+          ? Math.max(0, event.nativeEvent.locationY)
+          : Math.max(0, event.nativeEvent.locationX);
 
-  const goToNextInterval = useCallback(() => {
-    if (!visibleTimeRange || !serverTime) return;
+        const visibleDuration =
+          visibleTimeRange.end.getTime() - visibleTimeRange.start.getTime();
+        const timeOffset = (tapCoord / axisLength) * visibleDuration;
+        const selectedTime = new Date(
+          visibleTimeRange.start.getTime() + timeOffset
+        );
 
-    const currentInterval = TIMELINE_INTERVALS[intervalIndex];
-    const newStart = new Date(
-      visibleTimeRange.start.getTime() + currentInterval
-    );
-    const newEnd = new Date(visibleTimeRange.end.getTime() + currentInterval);
+        const halfInterval = visibleDuration / 2;
+        const start = new Date(selectedTime.getTime() - halfInterval);
+        const end = new Date(selectedTime.getTime() + halfInterval);
+        setVisibleTimeRange({ start, end });
+        setBufferedTimeRange(null);
 
-    setVisibleTimeRange({ start: newStart, end: newEnd });
-    setBufferedTimeRange(null);
-  }, [visibleTimeRange, serverTime, intervalIndex]);
+        onTimeSelect(selectedTime);
+      }, 50);
+    },
+    [onTimeSelect, visibleTimeRange, screenWidth, isArchiveRestricted, isVertical, contentSize]
+  );
 
-  const centerOnCurrentTime = useCallback(() => {
-    if (!serverTime) return;
-
-    const currentInterval = TIMELINE_INTERVALS[intervalIndex];
-    const halfInterval = currentInterval / 2;
-    const currentDateTime = isLive ? serverTime : currentTime;
-    const start = new Date(currentDateTime.getTime() - halfInterval);
-    const end = new Date(currentDateTime.getTime() + halfInterval);
-
-    setVisibleTimeRange({ start, end });
-    setBufferedTimeRange(null);
-  }, [serverTime, intervalIndex, isLive, currentTime]);
+  const handleTapFromGesture = useCallback(
+    (x: number, y: number) => {
+      handleTimelineTap({
+        nativeEvent: { locationX: x, locationY: y },
+      } as unknown as GestureResponderEvent);
+    },
+    [handleTimelineTap]
+  );
 
   const changeZoomLevel = useCallback(
     (newIndex: number) => {
@@ -483,123 +402,428 @@ export const Timeline: React.FC<TimelineProps> = ({
     [visibleTimeRange, serverTime]
   );
 
-  return (
-    <View style={styles.container}>
-      <View style={styles.topControls}>
-        <Pressable
-          style={[styles.liveButton, isLive && styles.liveButtonActive]}
-          onPress={() => {
-            onLivePress();
-          }}
-        >
-          <Text
+  const tapGesture = useMemo(() => {
+    const resetPanningJS = () => {
+      isPanningRef.current = false;
+      setIsPanning(false);
+    };
+
+    return Gesture.Tap()
+      .runOnJS(true)
+      .enabled(true)
+      .maxDuration(250)
+      .onStart((event) => {
+        runOnJS(resetPanningJS)();
+        runOnJS(handleTapFromGesture)(event.x, event.y);
+      });
+  }, [handleTapFromGesture]);
+
+  const onPanStartJS = useCallback(() => {
+    if (!visibleTimeRange || !serverTime) return;
+    isPanningRef.current = true;
+    setIsPanning(true);
+    panStartRef.current = visibleTimeRange;
+    if (bufferUpdateTimeoutRef.current) {
+      clearTimeout(bufferUpdateTimeoutRef.current);
+    }
+  }, [visibleTimeRange, serverTime]);
+
+  const onPanUpdateJS = useCallback(
+    (translation: number) => {
+      const startRange = panStartRef.current;
+      if (!startRange) return;
+      const axisLength = isVertical
+        ? Math.max(1, contentSize.height)
+        : Math.max(1, contentSize.width);
+      const visibleDuration =
+        startRange.end.getTime() - startRange.start.getTime();
+      const timeOffset = (translation / axisLength) * visibleDuration;
+      const newStart = new Date(startRange.start.getTime() - timeOffset);
+      const newEnd = new Date(startRange.end.getTime() - timeOffset);
+      setVisibleTimeRange({ start: newStart, end: newEnd });
+    },
+    [screenWidth, isVertical, contentSize]
+  );
+
+  const onPanEndJS = useCallback(() => {
+    isPanningRef.current = false;
+    setIsPanning(false);
+    panStartRef.current = null;
+    if (bufferUpdateTimeoutRef.current) {
+      clearTimeout(bufferUpdateTimeoutRef.current);
+    }
+    lastInteractionRef.current = Date.now();
+  }, []);
+
+  const onPanFinalizeJS = useCallback(() => {
+    isPanningRef.current = false;
+    setIsPanning(false);
+    panStartRef.current = null;
+    lastInteractionRef.current = Date.now();
+  }, []);
+
+  const timePanGesture = useMemo(() => {
+    const pan = Gesture.Pan().runOnJS(true).enabled(!isArchiveRestricted);
+    if (isVertical) {
+      pan.activeOffsetY([-10, 10]).failOffsetX([-20, 20]);
+      pan.onStart(() => runOnJS(onPanStartJS)());
+      pan.onUpdate((event) => runOnJS(onPanUpdateJS)(event.translationY));
+      pan.onEnd(() => runOnJS(onPanEndJS)());
+      pan.onFinalize(() => runOnJS(onPanFinalizeJS)());
+    } else {
+      pan.activeOffsetX([-10, 10]).failOffsetY([-20, 20]);
+      pan.onStart(() => runOnJS(onPanStartJS)());
+      pan.onUpdate((event) => runOnJS(onPanUpdateJS)(event.translationX));
+      pan.onEnd(() => runOnJS(onPanEndJS)());
+      pan.onFinalize(() => runOnJS(onPanFinalizeJS)());
+    }
+    return pan;
+  }, [isArchiveRestricted, isVertical, onPanStartJS, onPanUpdateJS, onPanEndJS, onPanFinalizeJS]);
+
+  const onVerticalPanStartJS = useCallback(() => {
+    isPanningRef.current = true;
+    setIsPanning(true);
+  }, []);
+
+  const onVerticalPanEndJS = useCallback(
+    (translationY: number) => {
+      if (!visibleTimeRange || !serverTime) return;
+      const threshold = 30;
+      if (Math.abs(translationY) > threshold) {
+        if (translationY < 0) {
+          // Увеличить масштаб (уменьшить интервал)
+          changeZoomLevel(Math.max(0, intervalIndex - 1));
+        } else {
+          // Уменьшить масштаб (увеличить интервал)
+          changeZoomLevel(
+            Math.min(TIMELINE_INTERVALS.length - 1, intervalIndex + 1)
+          );
+        }
+      }
+      isPanningRef.current = false;
+      setIsPanning(false);
+      lastInteractionRef.current = Date.now();
+    },
+    [visibleTimeRange, serverTime, intervalIndex, changeZoomLevel]
+  );
+
+  const onVerticalPanFinalizeJS = useCallback(() => {
+    isPanningRef.current = false;
+    setIsPanning(false);
+    lastInteractionRef.current = Date.now();
+  }, []);
+
+  const zoomPanGesture = useMemo(() => {
+    const pan = Gesture.Pan().runOnJS(true).enabled(!isArchiveRestricted);
+    if (isVertical) {
+      // In vertical mode: left/right to change scale
+      pan.activeOffsetX([-10, 10]).failOffsetY([-20, 20]);
+      pan.onStart(() => runOnJS(onVerticalPanStartJS)());
+      pan.onEnd((event) => runOnJS(onVerticalPanEndJS)(event.translationX));
+      pan.onFinalize(() => runOnJS(onVerticalPanFinalizeJS)());
+    } else {
+      // In horizontal mode: up/down to change scale
+      pan.activeOffsetY([-10, 10]).failOffsetX([-20, 20]);
+      pan.onStart(() => runOnJS(onVerticalPanStartJS)());
+      pan.onEnd((event) => runOnJS(onVerticalPanEndJS)(event.translationY));
+      pan.onFinalize(() => runOnJS(onVerticalPanFinalizeJS)());
+    }
+    return pan;
+  }, [isArchiveRestricted, isVertical, onVerticalPanStartJS, onVerticalPanEndJS, onVerticalPanFinalizeJS]);
+
+  const composedGesture = useMemo(() => {
+    return Gesture.Race(
+      tapGesture,
+      Gesture.Simultaneous(timePanGesture, zoomPanGesture)
+    );
+  }, [tapGesture, timePanGesture, zoomPanGesture]);
+
+  const renderTimelineBlocks = () => {
+    if (!visibleTimeRange || !bufferedTimeRange || timelineData.length === 0) {
+      return null;
+    }
+
+    const blocks = [];
+    const axisSize = isVertical
+      ? Math.max(1, contentSize.height)
+      : Math.max(1, contentSize.width);
+
+    const totalFragments = timelineData.length;
+    const blockSize = axisSize / totalFragments;
+  
+    const bufferedDuration =
+      bufferedTimeRange.end.getTime() - bufferedTimeRange.start.getTime();
+    const visibleDuration =
+      visibleTimeRange.end.getTime() - visibleTimeRange.start.getTime();
+
+    const startOffset =
+      (visibleTimeRange.start.getTime() - bufferedTimeRange.start.getTime()) /
+      bufferedDuration;
+    const endOffset =
+      (visibleTimeRange.end.getTime() - bufferedTimeRange.start.getTime()) /
+      bufferedDuration;
+
+    const startIndex = Math.max(0, Math.floor(startOffset * totalFragments));
+    const endIndex = Math.min(
+      totalFragments - 1,
+      Math.ceil(endOffset * totalFragments)
+    );
+
+    for (let i = startIndex; i <= endIndex; i++) {
+      const hasArchive = timelineData[i] === 1;
+
+      let blockStyle: StyleProp<ViewStyle> = {
+        backgroundColor: hasArchive
+          ? "#4CAF50"
+          : "rgba(255, 255, 255, 0.1)",
+      };
+
+      if (isVertical) {
+        const blockTop = ((i - startIndex) / (endIndex - startIndex + 1)) * contentSize.height;
+        blockStyle.left = 0;
+        blockStyle.width = VERTICAL_BLOCK_WIDTH;
+        blockStyle.top = blockTop;
+        blockStyle.height = Math.max(1, blockSize);
+      } else {
+        const blockLeft = ((i - startIndex) / (endIndex - startIndex + 1)) * (screenWidth - 20);
+        blockStyle.left = blockLeft;
+        blockStyle.width = Math.max(1, blockSize);
+      }
+
+      blocks.push(
+        <View
+          key={i}
+          style={[
+            styles.timelineBlock,
+            blockStyle,
+          ]}
+        />
+      );
+    }
+
+    return blocks;
+  };
+
+  const renderTimeLabels = () => {
+    if (!visibleTimeRange) return null;
+
+    const labels = [];
+    const axisSize = isVertical
+      ? Math.max(1, contentSize.height)
+      : Math.max(1, contentSize.width);
+    const visibleDuration =
+      visibleTimeRange.end.getTime() - visibleTimeRange.start.getTime();
+
+    let labelInterval: number;
+    if (visibleDuration <= 5 * 60 * 1000) {
+      labelInterval = 1 * 60 * 1000; // каждую минуту
+    } else if (visibleDuration <= 30 * 60 * 1000) {
+      labelInterval = 5 * 60 * 1000; // каждые 5 минут
+    } else if (visibleDuration <= 2 * 60 * 60 * 1000) {
+      labelInterval = 15 * 60 * 1000; // каждые 15 минут
+    } else if (visibleDuration <= 12 * 60 * 60 * 1000) {
+      labelInterval = 60 * 60 * 1000; // каждый час
+    } else {
+      labelInterval = 4 * 60 * 60 * 1000; // каждые 4 часа
+    }
+
+    const startTime = visibleTimeRange.start.getTime();
+    const firstLabelTime = Math.ceil(startTime / labelInterval) * labelInterval;
+
+    for (
+      let time = firstLabelTime;
+      time <= visibleTimeRange.end.getTime();
+      time += labelInterval
+    ) {
+      const labelDate = new Date(time);
+      const position = ((time - startTime) / visibleDuration) * axisSize;
+
+      const timeString = labelDate.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+
+      const dateString = labelDate.toLocaleDateString(['ru-RU'], {
+        day: "2-digit",
+        month: "2-digit",
+      });
+
+      const isMainLabel = labelInterval >= 60 * 60 * 1000;
+
+      if (isVertical) {
+        labels.push(
+          <View
+            key={time}
             style={[
-              styles.liveButtonText,
-              isLive && styles.liveButtonTextActive,
+              styles.timeLabel,
+              {
+                top: position,
+                left: VERTICAL_BLOCK_WIDTH + 8,
+                flexDirection: "row",
+                alignItems: "center",
+              },
             ]}
           >
-            LIVE
-          </Text>
-        </Pressable>
-
-        <View style={styles.zoomControls}>
-          <IconButton
-            icon="minus"
-            size={14}
-            iconColor="white"
-            onPress={() =>
-              changeZoomLevel(
-                Math.min(TIMELINE_INTERVALS.length - 1, intervalIndex + 1)
-              )
-            }
-            disabled={intervalIndex >= TIMELINE_INTERVALS.length - 1}
-          />
-          <Text style={styles.zoomLabel}>{INTERVAL_NAMES[intervalIndex]}</Text>
-          <IconButton
-            icon="plus"
-            size={14}
-            iconColor="white"
-            onPress={() => changeZoomLevel(Math.max(0, intervalIndex - 1))}
-            disabled={intervalIndex <= 0}
-          />
-        </View>
-
-        <View style={styles.navigationControls}>
-          <IconButton
-            icon="chevron-left"
-            size={14}
-            iconColor="white"
-            onPress={goToPreviousInterval}
-          />
-          <IconButton
-            icon="crosshairs-gps"
-            size={14}
-            iconColor={isLive ? "#FF5722" : "white"}
-            onPress={centerOnCurrentTime}
-          />
-          <IconButton
-            icon="chevron-right"
-            size={14}
-            iconColor="white"
-            onPress={goToNextInterval}
-          />
-        </View>
-
-        {isArchiveRestricted && !isLive && (
-          <View style={styles.restrictionIndicator}>
-            <Text style={styles.restrictionText}>🔒</Text>
+            <View>
+              <Text
+                style={
+                  isMainLabel ? styles.timeLabelText : styles.timeLabelTextSmall
+                }
+              >
+                {timeString === '00:00' ? dateString : timeString}
+              </Text>
+              {visibleDuration >= 24 * 60 * 60 * 1000 && (
+                <Text style={styles.dateLabelText}>{dateString}</Text>
+              )}
+            </View>
           </View>
+        );
+      } else {
+        labels.push(
+          <View key={time} style={[styles.timeLabel, { left: position - 20 }]}>
+            <Text
+              style={
+                isMainLabel ? styles.timeLabelText : styles.timeLabelTextSmall
+              }
+            >
+              {timeString}
+            </Text>
+            {visibleDuration >= 24 * 60 * 60 * 1000 && (
+              <Text style={styles.dateLabelText}>{dateString}</Text>
+            )}
+            <View
+              style={[
+                styles.timeTick,
+                isMainLabel ? styles.mainTick : styles.subTick,
+              ]}
+            />
+          </View>
+        );
+      }
+    }
+    return labels;
+  };
+
+  const renderCurrentTimeIndicator = () => {
+    if (!visibleTimeRange) return null;
+
+    const axisSize = isVertical
+      ? Math.max(1, contentSize.height)
+      : Math.max(1, contentSize.width);
+    const centerPos = axisSize / 2;
+    const centerTime = new Date(
+      (visibleTimeRange.start.getTime() + visibleTimeRange.end.getTime()) / 2
+    );
+
+    return (
+      <View
+        style={
+          isVertical
+            ? [styles.currentTimeIndicator, { top: 0 }]
+            : [styles.currentTimeIndicator, { left: centerPos }]
+        }
+      >
+        <View style={[styles.currentTimeLine, isVertical ? styles.currentTimeLineVertical : styles.currentTimeLineHorizontal]} />
+        <View
+          style={
+            isVertical
+              ? { width: 8, height: 8, borderRadius: 4, backgroundColor: "#FF5722", position: "absolute", left: VERTICAL_BLOCK_WIDTH - 4 }
+              : styles.currentTimeCircle
+          }
+        />
+        {!isLive && (
+          <Text style={styles.selectedTimeLabel}>
+            {centerTime.getHours().toString().padStart(2, "0")}:
+            {centerTime.getMinutes().toString().padStart(2, "0")}:
+            {centerTime.getSeconds().toString().padStart(2, "0")}
+          </Text>
         )}
       </View>
+    );
+  };
 
-      <View style={styles.timelineContainer}>
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color="#fff" />
-            <Text style={styles.loadingText}>Загрузка...</Text>
-          </View>
-        ) : error ? (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
-            <Button
-              mode="contained"
-              onPress={() =>
-                visibleTimeRange &&
-                loadTimeline(visibleTimeRange.start, visibleTimeRange.end)
-              }
-              style={styles.retryButton}
-              labelStyle={styles.retryButtonText}
-            >
-              Повторить
-            </Button>
-          </View>
-        ) : visibleTimeRange ? (
+  if (!isVisible) {
+    return null;
+  }
+
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <View style={[styles.container, { height: isVertical ? '100%' as const : timelineHeight }]}>
+        <View style={styles.topControls}>
           <Pressable
-            style={[
-              styles.timelineContent,
-              isArchiveRestricted && styles.timelineDisabled,
-            ]}
-            onPress={handleTimelineTap}
-            disabled={isArchiveRestricted}
+            style={[styles.liveButton, isLive && styles.liveButtonActive]}
+            onPress={() => {
+              onLivePress();
+            }}
           >
-            {renderTimeLabels()}
-
-            <View style={styles.timelineBlocksContainer}>
-              {renderTimelineBlocks()}
-            </View>
-
-            {renderCurrentTimeIndicator()}
+            <Text
+              style={[
+                styles.liveButtonText,
+                isLive && styles.liveButtonTextActive,
+              ]}
+            >
+              LIVE
+            </Text>
           </Pressable>
-        ) : null}
-      </View>
-    </View>
+
+          {isArchiveRestricted && !isLive && (
+            <View style={styles.restrictionIndicator}>
+              <Text style={styles.restrictionText}>🔒</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.timelineContainer}>
+          {error ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+              <Button
+                mode="contained"
+                onPress={() =>
+                  visibleTimeRange &&
+                  loadTimeline(visibleTimeRange.start, visibleTimeRange.end)
+                }
+                style={styles.retryButton}
+                labelStyle={styles.retryButtonText}
+              >
+                Повторить
+              </Button>
+            </View>
+          ) : visibleTimeRange ? (
+            <GestureDetector gesture={composedGesture}>
+              <View
+                style={[
+                  styles.timelineContent,
+                  isArchiveRestricted && styles.timelineDisabled,
+                    isPanning && styles.timelinePanning,
+                ]}
+                onLayout={(e) =>
+                  setContentSize({
+                    width: e.nativeEvent.layout.width,
+                    height: e.nativeEvent.layout.height,
+                  })
+                }
+              >
+                {renderTimeLabels()}
+
+                <View style={[styles.timelineBlocksContainer, { top: isVertical ? 0 : 30 }]}>
+                  {renderTimelineBlocks()}
+                </View>
+
+                {renderCurrentTimeIndicator()}
+              </View>
+            </GestureDetector>
+          ) : null}
+        </View>
+      </View >
+    </GestureHandlerRootView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    height: TIMELINE_HEIGHT,
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    backgroundColor: "#333333",
     flexDirection: "column",
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -608,7 +832,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 5,
+    marginBottom: 10,
+    marginTop: 5,
     paddingHorizontal: 5,
   },
   liveButton: {
@@ -664,9 +889,14 @@ const styles = StyleSheet.create({
     flex: 1,
     position: "relative",
     minHeight: 60,
+    overflow: "hidden",
   },
   timelineDisabled: {
     opacity: 0.5,
+  },
+  timelinePanning: {
+    opacity: 0.8,
+    transform: [{ scale: 0.98 }],
   },
   dateLabelText: {
     color: "rgba(255, 255, 255, 0.8)",
@@ -706,13 +936,13 @@ const styles = StyleSheet.create({
   },
   timelineBlocksContainer: {
     position: "absolute",
-    top: 30,
     left: 0,
     right: 0,
-    height: 20,
+    bottom: 0,
   },
   timelineBlock: {
-    height: 20,
+    position: "absolute",
+    height: '100%',
     borderRadius: 1,
   },
   timeLabel: {
@@ -757,10 +987,20 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   currentTimeLine: {
-    width: 2,
-    height: "100%",
     backgroundColor: "#FF5722",
     position: "absolute",
+  },
+  currentTimeLineHorizontal: {
+    width: 2,
+    height: "100%",
+  },
+  currentTimeLineVertical: {
+    flex: 1,
+    width: VERTICAL_BLOCK_WIDTH,
+    left: 0,
+    right: 0,
+    height: 2,
+    top: "50%",
   },
   currentTimeCircle: {
     width: 8,
