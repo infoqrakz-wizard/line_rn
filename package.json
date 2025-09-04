@@ -10,7 +10,9 @@
     "postinstall": "patch-package"
   },
   "dependencies": {
+    "@gorhom/bottom-sheet": "^5.2.4",
     "@openspacelabs/react-native-zoomable-view": "^2.4.2",
+    "@react-navigation/bottom-tabs": "^7.4.7",
     "@react-navigation/native": "^7.1.17",
     "@react-navigation/stack": "^7.4.7",
     "@types/lodash": "^4.17.20",
@@ -31,7 +33,7 @@
     "react-native-reanimated": "~3.17.4",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
-    "react-native-vector-icons": "^10.3.0",
+    "react-native-svg": "15.11.2",
     "zustand": "^5.0.7"
   },
   "devDependencies": {

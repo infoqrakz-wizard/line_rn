@@ -62,7 +62,10 @@ const QRScannerScreen = () => {
   if (!permission) {
     return (
       <View
-        style={[styles.container, { backgroundColor: theme.colors.background }]}
+        style={[
+          styles.container,
+          { backgroundColor: theme.colors.primaryContainer },
+        ]}
       >
         <Text style={{ color: theme.colors.onBackground }}>
           Запрос разрешения на использование камеры
@@ -74,17 +77,28 @@ const QRScannerScreen = () => {
   if (!permission.granted) {
     return (
       <View
-        style={[styles.container, { backgroundColor: theme.colors.background }]}
+        style={[
+          styles.container,
+          { backgroundColor: theme.colors.primaryContainer },
+        ]}
       >
-        <Surface style={styles.permissionCard}>
+        <Surface
+          style={[
+            styles.permissionCard,
+            { backgroundColor: theme.colors.primaryContainer },
+          ]}
+        >
           <Text
-            style={[styles.permissionText, { color: theme.colors.onSurface }]}
+            style={[
+              styles.permissionText,
+              { color: theme.colors.onBackground },
+            ]}
           >
             Нет доступа к камере
           </Text>
           <Text
             style={{
-              color: theme.colors.onSurface,
+              color: theme.colors.onBackground,
               textAlign: "center",
               marginVertical: 10,
             }}
@@ -108,7 +122,10 @@ const QRScannerScreen = () => {
 
   return (
     <View
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      style={[
+        styles.container,
+        { backgroundColor: theme.colors.primaryContainer },
+      ]}
     >
       <CameraView
         style={styles.camera}
@@ -158,7 +175,10 @@ const QRScannerScreen = () => {
         </View>
         <View style={styles.bottomOverlay}>
           <Text
-            style={[styles.instructionText, { color: theme.colors.onSurface }]}
+            style={[
+              styles.instructionText,
+              { color: theme.colors.onSurface },
+            ]}
           >
             Наведите камеру на QR-код
           </Text>

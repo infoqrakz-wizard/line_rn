@@ -45,7 +45,7 @@ const RTSPModal: React.FC<RTSPModalProps> = ({
     if (Object.keys(newErrors).length === 0) {
       const serverData: Omit<RTSPServer, "id"> = {
         name: serverName.trim(),
-        rtspUrl: rtspUrl.trim(),
+        url: rtspUrl.trim(),
         lastUsed: Date.now(),
         createdAt: new Date().toISOString(),
       };
@@ -69,12 +69,12 @@ const RTSPModal: React.FC<RTSPModalProps> = ({
         onDismiss={handleClose}
         contentContainerStyle={[
           styles.modal,
-          { backgroundColor: theme.colors.surface },
+          { backgroundColor: theme.colors.background },
         ]}
       >
         <Text
           variant="headlineSmall"
-          style={[styles.title, { color: theme.colors.onSurface }]}
+          style={[styles.title, { color: theme.colors.onBackground }]}
         >
           Добавить RTSP поток
         </Text>
@@ -115,10 +115,7 @@ const RTSPModal: React.FC<RTSPModalProps> = ({
 
           <Text
             variant="bodySmall"
-            style={[
-              styles.helperText,
-              { color: theme.colors.onSurfaceVariant },
-            ]}
+            style={[styles.helperText, { color: theme.colors.onBackground }]}
           >
             Введите полную RTSP ссылку включая IP адрес, порт и путь к потоку
           </Text>
@@ -128,8 +125,12 @@ const RTSPModal: React.FC<RTSPModalProps> = ({
           <Button mode="outlined" onPress={handleClose} style={styles.button}>
             Отмена
           </Button>
-          <Button mode="contained" onPress={handleSave} style={styles.button}>
-            Сохранить
+          <Button
+            mode="contained"
+            onPress={handleSave}
+            style={[styles.button, { backgroundColor: theme.colors.primary }]}
+          >
+            <Text style={styles.buttonText}>Сохранить</Text>
           </Button>
         </View>
       </Modal>
@@ -172,6 +173,9 @@ const styles = StyleSheet.create({
   button: {
     flex: 1,
     marginHorizontal: 6,
+  },
+  buttonText: {
+    fontWeight: "700",
   },
 });
 

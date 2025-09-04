@@ -31,7 +31,7 @@ const EditRTSPModal: React.FC<EditRTSPModalProps> = ({
   useEffect(() => {
     if (visible && rtspServer) {
       setServerName(rtspServer.name);
-      setRtspUrl(rtspServer.rtspUrl);
+      setRtspUrl(rtspServer.url);
       setErrors({});
     }
   }, [visible, rtspServer]);
@@ -59,7 +59,7 @@ const EditRTSPModal: React.FC<EditRTSPModalProps> = ({
     if (Object.keys(newErrors).length === 0) {
       const serverData: Partial<RTSPServer> = {
         name: serverName.trim(),
-        rtspUrl: rtspUrl.trim(),
+        url: rtspUrl.trim(),
         lastUsed: Date.now(),
       };
 

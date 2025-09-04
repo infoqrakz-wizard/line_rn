@@ -1,18 +1,14 @@
-import React, { useState } from "react";
-import { View, StyleSheet } from "react-native";
-import {
-  Card,
-  Text,
-  IconButton,
-  useTheme,
-  Chip,
-  Menu,
-  Divider,
-} from "react-native-paper";
+import React from "react";
+import { View, StyleSheet, TouchableOpacity, Image } from "react-native";
+import { Card, Text, useTheme } from "react-native-paper";
 import { Server } from "../store/serverStore";
 import { RTSPServer } from "../store/rtspStore";
+import { CameraTabIcon, SettingIcon, ShieldIcon } from "../icons";
+import { Icon } from "react-native-paper";
 
-type DisplayServer = (Server & { serverType: 'nvr' }) | (RTSPServer & { serverType: 'rtsp' });
+type DisplayServer =
+  | (Server & { serverType: "nvr" })
+  | (RTSPServer & { serverType: "rtsp" });
 
 interface ServerCardProps {
   server: DisplayServer;
@@ -27,139 +23,138 @@ const ServerCard: React.FC<ServerCardProps> = ({
   onEdit,
   onDelete,
 }) => {
-  const [menuVisible, setMenuVisible] = useState(false);
   const theme = useTheme();
 
-  const openMenu = () => setMenuVisible(true);
-  const closeMenu = () => setMenuVisible(false);
-
   const handleEdit = () => {
-    closeMenu();
     onEdit(server);
   };
 
   const handleDelete = () => {
-    closeMenu();
     onDelete(server.id);
   };
 
   const getStatusColor = () => {
-    // В будущем можно добавить проверку статуса сервера
-    return theme.colors.primary;
+    return { backgroundColor: "#84E3AD59", textColor: "#21965399" };
+  };
+
+  const renderContent = (title: string, value: string | undefined) => {
+    return (
+      <View
+        style={[
+          styles.contentItem,
+          { borderBottomWidth: 1, borderBottomColor: theme.colors.outline },
+        ]}
+      >
+        <Text
+          style={[styles.contentText, { color: theme.colors.onBackground }]}
+        >
+          {title}
+        </Text>
+        <Text
+          style={[styles.contentText, { color: theme.colors.onBackground }]}
+        >
+          {value}
+        </Text>
+      </View>
+    );
   };
 
   return (
     <Card
-      style={[styles.card, { backgroundColor: theme.colors.surface }]}
+      style={[styles.card, { backgroundColor: theme.colors.primaryContainer }]}
       onPress={() => onPress(server)}
-      mode="elevated"
+      mode="contained"
     >
       <Card.Content style={styles.cardContent}>
         <View style={styles.header}>
           <View style={styles.titleContainer}>
-            <Text
-              variant="titleMedium"
-              style={[styles.title, { color: theme.colors.onSurface }]}
+            <View
+              style={[
+                styles.statusContainer,
+                { backgroundColor: getStatusColor().backgroundColor },
+              ]}
             >
-              {server.name}
-            </Text>
-            <View style={styles.statusContainer}>
               <View
                 style={[
                   styles.statusDot,
-                  { backgroundColor: getStatusColor() },
+                  { backgroundColor: getStatusColor().textColor },
                 ]}
               />
               <Text
-                variant="bodySmall"
-                style={{ color: theme.colors.onSurfaceVariant }}
+                style={[
+                  styles.statusText,
+                  { color: getStatusColor().textColor },
+                ]}
               >
-                Готов
+                активен
               </Text>
             </View>
-          </View>
-          <Menu
-            visible={menuVisible}
-            onDismiss={closeMenu}
-            anchor={
-              <IconButton
-                icon="dots-vertical"
-                size={20}
-                onPress={openMenu}
-                iconColor={theme.colors.onSurfaceVariant}
-              />
-            }
-          >
-            <Menu.Item onPress={handleEdit} title="Редактировать" />
-            <Divider />
-            <Menu.Item
-              onPress={handleDelete}
-              title="Удалить"
-              titleStyle={{ color: theme.colors.error }}
-            />
-          </Menu>
-        </View>
-
-        <View style={styles.details}>
-          <View style={styles.urlContainer}>
-            <IconButton
-              icon={server.serverType === "rtsp" ? "video" : "web"}
-              size={16}
-              iconColor={theme.colors.onSurfaceVariant}
-              style={styles.iconButton}
-            />
-            <Text
-              variant="bodyMedium"
-              style={[styles.url, { color: theme.colors.onSurface }]}
-            >
-              {server.serverType === "rtsp" 
-                ? (server as RTSPServer).rtspUrl 
-                : `${(server as Server).host || (server as Server).url}:${(server as Server).port}`}
+            <Text style={[styles.title, { color: theme.colors.onBackground }]}>
+              {server.name}
             </Text>
           </View>
-
-          {server.serverType !== "rtsp" && ((server as Server).username || (server as Server).login) && (
-            <View style={styles.loginContainer}>
-              <IconButton
-                icon="account"
-                size={16}
-                iconColor={theme.colors.onSurfaceVariant}
-                style={styles.iconButton}
-              />
-              <Text
-                variant="bodySmall"
-                style={{ color: theme.colors.onSurfaceVariant }}
-              >
-                {(server as Server).username || (server as Server).login}
-              </Text>
-            </View>
-          )}
-
-          {server.serverType === "rtsp" && (
-            <View style={styles.typeContainer}>
-              <Chip 
-                icon="video" 
-                mode="outlined" 
-                compact
-                style={styles.typeChip}
-                textStyle={styles.typeChipText}
-              >
-                RTSP поток
-              </Chip>
-            </View>
-          )}
+          <View style={styles.iconContainer}>
+            <TouchableOpacity activeOpacity={0.8}>
+              <SettingIcon />
+            </TouchableOpacity>
+            <ShieldIcon />
+          </View>
         </View>
-
+        <View style={styles.content}>
+          {renderContent("IP адрес", server.url)}
+          {renderContent("Дней архива", "14")}
+          {renderContent("Режим охраны", "Вкл")}
+        </View>
         <View style={styles.footer}>
-          <Chip mode="outlined" style={styles.chip}>
-            {server.serverType === "rtsp" 
-              ? new Date((server as RTSPServer).createdAt).toLocaleDateString("ru-RU")
-              : (server as Server).createdAt 
-              ? new Date((server as Server).createdAt!).toLocaleDateString("ru-RU")
-              : server.lastUsed
-              ? new Date(server.lastUsed).toLocaleDateString("ru-RU")
-              : "Недавно добавлен"}
-          </Chip>
+          <View style={styles.footerCameraInfo}>
+            <CameraTabIcon />
+            <Text
+              style={[styles.footerText, { color: theme.colors.onBackground }]}
+            >
+              13 Камер
+            </Text>
+          </View>
+          <View style={styles.footerCameraInfo}>
+            {Array.from({ length: 3 }).map((_, index) => (
+              <>
+                <Image
+                  source={require("../../assets/cameraTemplate.png")}
+                  resizeMode="cover"
+                  style={[
+                    styles.footerCameraInfoItem,
+                    {
+                      zIndex: 100 - index - 1,
+                      right: (index + 1) * 50 - 12 * (index + 1),
+                      borderLeftWidth: 2,
+                      borderTopWidth: 2,
+                      borderBottomWidth: 2,
+                      borderColor: theme.colors.primaryContainer,
+                    },
+                  ]}
+                />
+                {index === 2 && (
+                  <TouchableOpacity
+                    style={[
+                      styles.footerCameraInfoItemTouchable,
+                      {
+                        backgroundColor: theme.colors.onBackground,
+                        zIndex: 100,
+                        borderLeftWidth: 2,
+                        borderLeftColor: theme.colors.primaryContainer,
+                      },
+                    ]}
+                    activeOpacity={0.8}
+                  >
+                    <Icon
+                      source="arrow-right"
+                      size={20}
+                      color={theme.colors.primaryContainer}
+                    />
+                  </TouchableOpacity>
+                )}
+              </>
+            ))}
+          </View>
         </View>
       </Card.Content>
     </Card>
@@ -168,68 +163,93 @@ const ServerCard: React.FC<ServerCardProps> = ({
 
 const styles = StyleSheet.create({
   card: {
-    marginVertical: 8,
     borderRadius: 12,
     elevation: 4,
   },
   cardContent: {
     paddingVertical: 16,
+    gap: 20,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 12,
   },
   titleContainer: {
     flex: 1,
+    paddingRight: 12,
   },
   title: {
     fontWeight: "bold",
     marginBottom: 4,
+    marginTop: 6,
+    fontSize: 18,
+  },
+  iconContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
   statusContainer: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    borderRadius: 30,
+    width: 73,
   },
   statusDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    marginRight: 6,
   },
-  details: {
-    marginBottom: 12,
+  statusText: {
+    fontSize: 12,
+    paddingBottom: 2,
   },
-  urlContainer: {
+  content: {
+    gap: 8,
+  },
+  contentText: {},
+  contentItem: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 4,
+    justifyContent: "space-between",
+    paddingBottom: 4,
   },
-  loginContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  iconButton: {
-    margin: 0,
-    marginRight: 4,
-  },
-  url: {
-    fontWeight: "500",
-  },
+
   footer: {
     flexDirection: "row",
-    justifyContent: "flex-end",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
-  chip: {},
-  typeContainer: {
-    marginTop: 8,
+  footerCameraInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginLeft: 8,
   },
-  typeChip: {
-    alignSelf: "flex-start",
+  footerCameraInfoItemContainer: {
+    width: 50,
+    height: 50,
+    position: "absolute",
   },
-  typeChipText: {
-    fontSize: 11,
+  footerCameraInfoItem: {
+    width: 50,
+    height: 50,
+    borderRadius: 12,
+    position: "absolute",
+  },
+  footerText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  footerCameraInfoItemTouchable: {
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
   },
 });
 

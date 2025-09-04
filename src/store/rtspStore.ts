@@ -7,7 +7,7 @@ const storage = new MMKV();
 export interface RTSPServer {
   id: string;
   name: string;
-  rtspUrl: string;
+  url: string;
   lastUsed?: number;
   createdAt: string;
 }

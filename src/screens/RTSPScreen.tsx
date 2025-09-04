@@ -138,7 +138,7 @@ const RTSPScreen = () => {
                   { color: theme.colors.onSurfaceVariant },
                 ]}
               >
-                {rtspServer.rtspUrl}
+                {rtspServer.url}
               </Text>
             </View>
           )}
@@ -162,7 +162,7 @@ const RTSPScreen = () => {
                   { color: theme.colors.onSurfaceVariant },
                 ]}
               >
-                {rtspServer.rtspUrl}
+                {rtspServer.url}
               </Text>
             </View>
           )}
@@ -182,7 +182,7 @@ const RTSPScreen = () => {
           >
             <LibVlcPlayerView
               autoplay={true}
-              source={rtspServer.rtspUrl}
+              source={rtspServer.url}
               options={[
                 "--no-audio",
                 "--rtsp-tcp",

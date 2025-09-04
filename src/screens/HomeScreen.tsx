@@ -1,28 +1,24 @@
-import React, { useEffect, useState } from "react";
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
 import {
   View,
   StyleSheet,
   Alert,
   FlatList,
-  TouchableWithoutFeedback,
+  TouchableOpacity,
 } from "react-native";
-import Animated, {
-  useSharedValue,
-  withTiming,
-  useAnimatedStyle,
-  runOnJS,
-} from "react-native-reanimated";
-import {
-  FAB,
-  Text,
-  Card,
-  Title,
-  Paragraph,
-  useTheme,
-} from "react-native-paper";
+import BottomSheet, {
+  BottomSheetView,
+  BottomSheetBackdrop,
+} from "@gorhom/bottom-sheet";
+import { useTheme, Text, Icon } from "react-native-paper";
 import * as ImagePicker from "expo-image-picker";
 import { useNavigation, NavigationProp } from "@react-navigation/native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useServerStore, Server } from "../store/serverStore";
 import { useRTSPStore, RTSPServer } from "../store/rtspStore";
 import { parseQRServerData, createServerFromQR } from "../utils/qrParser";
@@ -32,10 +28,26 @@ import { RootStackParamList } from "../navigation/AppNavigator";
 import CreateServerModal from "../components/CreateServerModal";
 import RTSPModal from "../components/RTSPModal";
 import EditRTSPModal from "../components/EditRTSPModal";
-import { Camera, CameraView } from "expo-camera";
+import { Camera } from "expo-camera";
+import Header from "../components/Header";
+import ProductCard from "../components/ProductCard";
+
+type DisplayServer =
+  | (Server & { serverType: "nvr" })
+  | (RTSPServer & { serverType: "rtsp" });
+
+const testServer: DisplayServer = {
+  id: "1",
+  name: "Демо-сервер",
+  url: "name265d0000",
+  username: "test",
+  password: "test",
+  lastUsed: 0,
+  serverType: "nvr" as const,
+  port: 0,
+};
 
 const HomeScreen = () => {
-  const [fabMenuOpen, setFabMenuOpen] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [rtspModalVisible, setRtspModalVisible] = useState(false);
@@ -44,15 +56,10 @@ const HomeScreen = () => {
   const [editingRTSPServer, setEditingRTSPServer] = useState<RTSPServer | null>(
     null
   );
-  const fadeAnim = useSharedValue(0);
-  const translateY1 = useSharedValue(0);
-  const translateY2 = useSharedValue(0);
-  const translateY3 = useSharedValue(0);
-  const translateY4 = useSharedValue(0);
-  const rotation = useSharedValue(0);
+  const bottomSheetRef = useRef<BottomSheet>(null);
+  const snapPoints = useMemo(() => [280], []);
   const theme = useTheme();
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
-  const { bottom, top } = useSafeAreaInsets();
   const {
     servers,
     addServer,
@@ -96,67 +103,7 @@ const HomeScreen = () => {
     getLastUsedRTSPServerTime,
   ]);
 
-  const openFabMenu = () => {
-    setFabMenuOpen(true);
-    rotation.value = withTiming(45, { duration: 200 });
-    fadeAnim.value = withTiming(1, { duration: 300 });
-    translateY1.value = withTiming(-70, { duration: 300 });
-    translateY2.value = withTiming(-130, { duration: 300 });
-    translateY3.value = withTiming(-190, { duration: 300 });
-    translateY4.value = withTiming(-250, { duration: 300 });
-  };
-
-  const closeFabMenu = () => {
-    rotation.value = withTiming(0, { duration: 200 });
-    fadeAnim.value = withTiming(0, { duration: 300 });
-    translateY1.value = withTiming(0, { duration: 300 });
-    translateY2.value = withTiming(0, { duration: 300 });
-    translateY3.value = withTiming(0, { duration: 300 });
-    translateY4.value = withTiming(0, { duration: 300 }, (finished) => {
-      if (finished) {
-        runOnJS(setFabMenuOpen)(false);
-      }
-    });
-  };
-
-  const toggleFabMenu = () => {
-    if (fabMenuOpen) {
-      closeFabMenu();
-    } else {
-      openFabMenu();
-    }
-  };
-
-  const overlayStyle = useAnimatedStyle(() => ({
-    opacity: fadeAnim.value,
-  }));
-
-  const menuItem1Style = useAnimatedStyle(() => ({
-    opacity: fadeAnim.value,
-    transform: [{ translateY: translateY1.value }],
-  }));
-
-  const menuItem2Style = useAnimatedStyle(() => ({
-    opacity: fadeAnim.value,
-    transform: [{ translateY: translateY2.value }],
-  }));
-
-  const menuItem3Style = useAnimatedStyle(() => ({
-    opacity: fadeAnim.value,
-    transform: [{ translateY: translateY3.value }],
-  }));
-
-  const menuItem4Style = useAnimatedStyle(() => ({
-    opacity: fadeAnim.value,
-    transform: [{ translateY: translateY4.value }],
-  }));
-
-  const fabStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rotation.value}deg` }],
-  }));
-
   const handleChooseFromGallery = async () => {
-    closeFabMenu();
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: "images",
@@ -210,7 +157,6 @@ const HomeScreen = () => {
   };
 
   const handleOpenManual = () => {
-    closeFabMenu();
     setCreateModalVisible(true);
   };
 
@@ -222,12 +168,10 @@ const HomeScreen = () => {
   };
 
   const handleOpenCamera = () => {
-    closeFabMenu();
     navigation.navigate("QRScanner");
   };
 
   const handleOpenRTSP = () => {
-    closeFabMenu();
     setRtspModalVisible(true);
   };
 
@@ -239,10 +183,6 @@ const HomeScreen = () => {
   const handleCloseRTSPModal = () => {
     setRtspModalVisible(false);
   };
-
-  type DisplayServer =
-    | (Server & { serverType: "nvr" })
-    | (RTSPServer & { serverType: "rtsp" });
 
   const allServers: DisplayServer[] = React.useMemo(() => {
     const nvrServers: DisplayServer[] = servers.map((server) => ({
@@ -329,6 +269,118 @@ const HomeScreen = () => {
     setCreateModalVisible(false);
   };
 
+  const handleBottomSheetOpen = () => {
+    bottomSheetRef.current?.snapToIndex(1);
+  };
+
+  const handleBottomSheetClose = () => {
+    bottomSheetRef.current?.close();
+  };
+
+  const bottomSheetMenuItems = [
+    {
+      title: "QR-Код",
+      onPress: () => {
+        handleBottomSheetClose();
+        handleOpenCamera();
+      },
+    },
+    {
+      title: "Из галереи",
+      onPress: () => {
+        handleBottomSheetClose();
+        handleChooseFromGallery();
+      },
+    },
+    {
+      title: "Ввести вручную",
+      onPress: () => {
+        handleBottomSheetClose();
+        handleOpenManual();
+      },
+    },
+    {
+      title: "RTSP сервер",
+      onPress: () => {
+        handleBottomSheetClose();
+        handleOpenRTSP();
+      },
+    },
+  ];
+
+  const renderBackdrop = useCallback(
+    (props: any) => (
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+        opacity={1}
+        style={[
+          props.style,
+          {
+            backgroundColor: "#0000007D",
+          },
+        ]}
+      />
+    ),
+    []
+  );
+
+  const renderBottomSheetContent = useCallback(
+    () => (
+      <BottomSheetView
+        style={[
+          styles.bottomSheetContent,
+          { backgroundColor: theme.colors.primaryContainer },
+        ]}
+      >
+        <View style={styles.bottomSheetHeader}>
+          <Text
+            variant="titleMedium"
+            style={[
+              styles.bottomSheetTitle,
+              { color: theme.colors.onBackground },
+            ]}
+          >
+            Добавить сервер
+          </Text>
+          <TouchableOpacity onPress={handleBottomSheetClose}>
+            <Icon source="close" size={24} color={theme.colors.outline} />
+          </TouchableOpacity>
+        </View>
+
+        {bottomSheetMenuItems.map((item, index) => (
+          <TouchableOpacity
+            key={index}
+            style={[
+              styles.bottomSheetMenuItem,
+              index < bottomSheetMenuItems.length - 1 &&
+                styles.bottomSheetMenuItemBorder,
+            ]}
+            onPress={item.onPress}
+            activeOpacity={0.7}
+          >
+            <Text
+              variant="bodyLarge"
+              style={[
+                styles.bottomSheetMenuItemText,
+                { color: theme.colors.onBackground },
+              ]}
+            >
+              {item.title}
+            </Text>
+            <Icon
+              source="chevron-right"
+              size={24}
+              color={theme.colors.outline}
+            />
+          </TouchableOpacity>
+        ))}
+      </BottomSheetView>
+    ),
+    [bottomSheetMenuItems, theme.colors, handleBottomSheetClose]
+  );
+
   const renderServerCard = ({ item }: { item: DisplayServer }) => (
     <ServerCard
       server={item}
@@ -340,161 +392,30 @@ const HomeScreen = () => {
 
   return (
     <View
-      style={[
-        styles.container,
-        { backgroundColor: theme.colors.background, paddingTop: top },
-      ]}
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <View
-        style={[
-          styles.content,
-          { justifyContent: allServers.length === 0 ? "center" : "flex-start" },
-        ]}
-      >
-        {allServers.length === 0 ? (
-          <Card style={styles.welcomeCard}>
-            <Card.Content>
-              <Title style={{ color: theme.colors.onSurface }}>
-                Camera View
-              </Title>
-              <Paragraph style={{ color: theme.colors.onSurface }}>
-                Добро пожаловать! Нажмите на кнопку внизу, чтобы добавить сервер
-                камер или RTSP поток.
-              </Paragraph>
-            </Card.Content>
-          </Card>
-        ) : (
-          <>
-            <Text
-              variant="headlineMedium"
-              style={[
-                styles.serversTitle,
-                { color: theme.colors.onBackground },
-              ]}
-            >
-              Мои серверы
-            </Text>
-            <FlatList
-              data={allServers}
-              renderItem={renderServerCard}
-              keyExtractor={(item) => item.id}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.serversList}
-            />
-          </>
-        )}
+      <Header />
+      <View style={[styles.content]}>
+        <FlatList
+          data={allServers}
+          renderItem={renderServerCard}
+          keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          style={styles.serversListContainer}
+          contentContainerStyle={styles.serversList}
+          ListHeaderComponent={() => (
+            <>
+              <ServerCard
+                server={testServer}
+                onPress={() => {}}
+                onEdit={() => {}}
+                onDelete={() => {}}
+              />
+            </>
+          )}
+          ListFooterComponent={() => <ProductCard />}
+        />
       </View>
-
-      {fabMenuOpen && (
-        <TouchableWithoutFeedback onPress={closeFabMenu}>
-          <Animated.View style={[styles.overlay, overlayStyle]} />
-        </TouchableWithoutFeedback>
-      )}
-
-      {fabMenuOpen && (
-        <>
-          <Animated.View
-            style={[
-              styles.fabMenuItem,
-              {
-                right: 16,
-                bottom: bottom + 16,
-              },
-              menuItem4Style,
-            ]}
-          >
-            <FAB
-              icon="video"
-              size="small"
-              label="RTSP"
-              style={[
-                styles.fabMenuButton,
-                { backgroundColor: theme.colors.primary },
-              ]}
-              onPress={handleOpenRTSP}
-            />
-          </Animated.View>
-
-          <Animated.View
-            style={[
-              styles.fabMenuItem,
-              {
-                right: 16,
-                bottom: bottom + 16,
-              },
-              menuItem3Style,
-            ]}
-          >
-            <FAB
-              icon="image"
-              size="small"
-              label="Галерея"
-              style={[
-                styles.fabMenuButton,
-                { backgroundColor: theme.colors.primary },
-              ]}
-              onPress={handleChooseFromGallery}
-            />
-          </Animated.View>
-
-          <Animated.View
-            style={[
-              styles.fabMenuItem,
-              {
-                right: 16,
-                bottom: bottom + 16,
-              },
-              menuItem2Style,
-            ]}
-          >
-            <FAB
-              icon="camera"
-              size="small"
-              label="Камера"
-              style={[
-                styles.fabMenuButton,
-                { backgroundColor: theme.colors.primary },
-              ]}
-              onPress={handleOpenCamera}
-            />
-          </Animated.View>
-
-          <Animated.View
-            style={[
-              styles.fabMenuItem,
-              {
-                right: 16,
-                bottom: bottom + 16,
-              },
-              menuItem1Style,
-            ]}
-          >
-            <FAB
-              icon="pencil-plus"
-              size="small"
-              label="Вручную"
-              style={[
-                styles.fabMenuButton,
-                { backgroundColor: theme.colors.primary },
-              ]}
-              onPress={handleOpenManual}
-            />
-          </Animated.View>
-        </>
-      )}
-
-      <FAB
-        icon={fabMenuOpen ? "close" : "plus"}
-        style={[
-          styles.fab,
-          {
-            backgroundColor: theme.colors.primary,
-            bottom: bottom,
-          },
-          fabStyle,
-        ]}
-        onPress={toggleFabMenu}
-      />
 
       <EditServerModal
         visible={editModalVisible}
@@ -521,6 +442,37 @@ const HomeScreen = () => {
         onDismiss={handleCloseRTSPModal}
         onSave={handleSaveRTSPServer}
       />
+
+      <TouchableOpacity
+        style={[
+          styles.addButton,
+          { backgroundColor: theme.colors.secondaryContainer },
+        ]}
+        onPress={handleBottomSheetOpen}
+        activeOpacity={0.8}
+      >
+        <Icon source="plus" size={24} color={theme.colors.secondary} />
+        <Text
+          variant="bodyMedium"
+          style={{ color: theme.colors.secondary, marginLeft: 8 }}
+        >
+          Добавить сервер
+        </Text>
+      </TouchableOpacity>
+
+      <BottomSheet
+        ref={bottomSheetRef}
+        index={-1}
+        snapPoints={snapPoints}
+        backgroundStyle={{
+          backgroundColor: theme.colors.primaryContainer,
+        }}
+        handleIndicatorStyle={{ height: 0 }}
+        enablePanDownToClose
+        backdropComponent={renderBackdrop}
+      >
+        {renderBottomSheetContent()}
+      </BottomSheet>
     </View>
   );
 };
@@ -531,16 +483,16 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 20,
+    paddingHorizontal: 10,
   },
   welcomeCard: {},
-  serversTitle: {
-    fontWeight: "bold",
-    marginBottom: 16,
-    textAlign: "center",
+  serversListContainer: {
+    flex: 1,
+    marginTop: 12,
   },
   serversList: {
-    paddingBottom: 100,
+    gap: 12,
+    paddingBottom: 72,
   },
   fab: {
     position: "absolute",
@@ -561,6 +513,54 @@ const styles = StyleSheet.create({
   },
   fabMenuButton: {
     marginBottom: 8,
+  },
+  addButton: {
+    position: "absolute",
+    bottom: 10,
+    width: "75%",
+    alignSelf: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  bottomSheetContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    flex: 1,
+  },
+  bottomSheetHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  bottomSheetTitle: {
+    fontWeight: "700",
+  },
+  bottomSheetMenuItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 0,
+  },
+  bottomSheetMenuItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F1F1",
+  },
+  bottomSheetMenuItemText: {
+    flex: 1,
   },
 });
 

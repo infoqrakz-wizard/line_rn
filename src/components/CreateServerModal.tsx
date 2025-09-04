@@ -113,18 +113,19 @@ const CreateServerModal: React.FC<CreateServerModalProps> = ({
         onDismiss={handleDismiss}
         contentContainerStyle={[
           styles.modalContainer,
-          { backgroundColor: theme.colors.surface },
+          { backgroundColor: theme.colors.background },
         ]}
       >
         <ScrollView showsVerticalScrollIndicator={false}>
           <Card
-            style={[styles.card, { backgroundColor: theme.colors.surface }]}
+            style={[styles.card, { backgroundColor: theme.colors.background }]}
+            mode="contained"
           >
             <Card.Content>
               <View style={styles.header}>
                 <Text
                   variant="headlineSmall"
-                  style={[styles.title, { color: theme.colors.onSurface }]}
+                  style={[styles.title, { color: theme.colors.onBackground }]}
                 >
                   Добавить сервер
                 </Text>
@@ -132,7 +133,7 @@ const CreateServerModal: React.FC<CreateServerModalProps> = ({
                   icon="close"
                   size={24}
                   onPress={handleDismiss}
-                  iconColor={theme.colors.onSurfaceVariant}
+                  iconColor={theme.colors.onBackground}
                 />
               </View>
 
@@ -213,9 +214,14 @@ const CreateServerModal: React.FC<CreateServerModalProps> = ({
                   mode="contained"
                   onPress={handleSave}
                   disabled={isLoading || !name || !url || !port || !login}
-                  style={styles.button}
+                  style={[
+                    styles.button,
+                    { backgroundColor: theme.colors.primary },
+                  ]}
                 >
-                  {isLoading ? loadingMessage : "Сохранить"}
+                  <Text style={styles.buttonText}>
+                    {isLoading ? loadingMessage : "Сохранить"}
+                  </Text>
                 </Button>
               </View>
             </Card.Content>
@@ -230,7 +236,6 @@ const styles = StyleSheet.create({
   modalContainer: {
     margin: 20,
     borderRadius: 16,
-    maxHeight: "90%",
   },
   card: {
     borderRadius: 16,
@@ -260,6 +265,9 @@ const styles = StyleSheet.create({
   },
   button: {
     minWidth: 100,
+  },
+  buttonText: {
+    fontWeight: "700",
   },
   cancelButton: {
     marginRight: 8,
