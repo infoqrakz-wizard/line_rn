@@ -1,0 +1,13 @@
+diff --git a/node_modules/expo-libvlc-player/ios/LibVlcPlayerView.swift b/node_modules/expo-libvlc-player/ios/LibVlcPlayerView.swift
+index 66040d5..f0efd61 100644
+--- a/node_modules/expo-libvlc-player/ios/LibVlcPlayerView.swift
++++ b/node_modules/expo-libvlc-player/ios/LibVlcPlayerView.swift
+@@ -183,7 +183,7 @@ class LibVlcPlayerView: ExpoView {
+                 height: Int(video.height),
+                 length: Double(length),
+                 seekable: seekable,
+-                tracks: mediaTracks,
++                tracks: mediaTracks
+             )
+ 
+             mediaLength = length

@@ -1,24 +1,15 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState } from "react";
 import { View, StyleSheet, Alert, Dimensions } from "react-native";
-import {
-  Text,
-  Button,
-  useTheme,
-  Surface,
-  IconButton,
-} from "react-native-paper";
-import { CameraView, CameraType, useCameraPermissions } from "expo-camera";
+import { Text, Button, useTheme, Surface } from "react-native-paper";
+import { CameraView, useCameraPermissions } from "expo-camera";
 import { useNavigation, NavigationProp } from "@react-navigation/native";
 import { useServerStore } from "../store/serverStore";
 import { parseQRServerData, createServerFromQR } from "../utils/qrParser";
 import { RootStackParamList } from "../navigation/AppNavigator";
 
-const { width, height } = Dimensions.get("window");
-
 const QRScannerScreen = () => {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
-  const [facing, setFacing] = useState<CameraType>("back");
   const theme = useTheme();
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const { addServer } = useServerStore();
@@ -121,7 +112,7 @@ const QRScannerScreen = () => {
     >
       <CameraView
         style={styles.camera}
-        facing={facing}
+        facing={"back"}
         onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
         barcodeScannerSettings={{
           barcodeTypes: ["qr", "pdf417"],

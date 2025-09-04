@@ -21,7 +21,6 @@ import {
   useTheme,
 } from "react-native-paper";
 import * as ImagePicker from "expo-image-picker";
-import QrImageReader from "react-native-qr-image-reader";
 import { useNavigation, NavigationProp } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useServerStore, Server } from "../store/serverStore";
@@ -33,6 +32,7 @@ import { RootStackParamList } from "../navigation/AppNavigator";
 import CreateServerModal from "../components/CreateServerModal";
 import RTSPModal from "../components/RTSPModal";
 import EditRTSPModal from "../components/EditRTSPModal";
+import { Camera, CameraView } from "expo-camera";
 
 const HomeScreen = () => {
   const [fabMenuOpen, setFabMenuOpen] = useState(false);
@@ -166,12 +166,14 @@ const HomeScreen = () => {
 
       if (!result.canceled && result.assets[0]) {
         try {
-          const qrResult = await QrImageReader.decode({
-            path: result.assets[0].uri,
-          });
+          const scanResult = await Camera.scanFromURLAsync(
+            result.assets[0].uri,
+            ["qr"]
+          );
 
-          if (qrResult && qrResult.result) {
-            const serverData = parseQRServerData(qrResult.result);
+          if (scanResult && scanResult.length > 0) {
+            const qrResult = scanResult[0].data;
+            const serverData = parseQRServerData(qrResult);
 
             if (serverData) {
               const newServer = createServerFromQR(serverData);
@@ -183,7 +185,7 @@ const HomeScreen = () => {
                 [{ text: "OK" }]
               );
             } else {
-              Alert.alert("QR-код найден", `Содержимое: ${qrResult.result}`, [
+              Alert.alert("QR-код найден", `Содержимое: ${qrResult}`, [
                 { text: "OK" },
               ]);
             }
