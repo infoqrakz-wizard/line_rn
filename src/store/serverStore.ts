@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { MMKV } from "react-native-mmkv";
+import { RTSPServer } from "./rtspStore";
 
 const storage = new MMKV();
 
@@ -14,10 +15,14 @@ export interface Server {
   type?: "nvr" | "rtsp";
   lastUsed?: number;
   createdAt?: string;
-  url?: string;
+  url: string;
   login?: string;
   pass?: string;
 }
+
+export type DisplayServer =
+  | (Server & { serverType: "nvr" })
+  | (RTSPServer & { serverType: "rtsp" });
 
 interface ServerState {
   servers: Server[];

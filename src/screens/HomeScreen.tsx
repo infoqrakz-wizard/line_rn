@@ -19,15 +19,13 @@ import BottomSheet, {
 import { useTheme, Text, Icon } from "react-native-paper";
 import * as ImagePicker from "expo-image-picker";
 import { useNavigation, NavigationProp } from "@react-navigation/native";
-import { useServerStore, Server } from "../store/serverStore";
+import { useServerStore, Server, DisplayServer } from "../store/serverStore";
 import { useRTSPStore, RTSPServer } from "../store/rtspStore";
 import { parseQRServerData, createServerFromQR } from "../utils/qrParser";
 import ServerCard from "../components/ServerCard";
-import EditServerModal from "../components/EditServerModal";
 import { RootStackParamList } from "../navigation/AppNavigator";
 import CreateServerModal from "../components/CreateServerModal";
 import RTSPModal from "../components/RTSPModal";
-import EditRTSPModal from "../components/EditRTSPModal";
 import { Camera } from "expo-camera";
 import Header from "../components/Header";
 import ProductCard from "../components/ProductCard";
@@ -38,10 +36,6 @@ import Animated, {
   SlideOutRight,
 } from "react-native-reanimated";
 import CameraSettings from "../components/CameraSettings";
-
-type DisplayServer =
-  | (Server & { serverType: "nvr" })
-  | (RTSPServer & { serverType: "rtsp" });
 
 const testServer: DisplayServer = {
   id: "1",
@@ -55,10 +49,8 @@ const testServer: DisplayServer = {
 };
 
 const HomeScreen = () => {
-  const [editModalVisible, setEditModalVisible] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [rtspModalVisible, setRtspModalVisible] = useState(false);
-  const [editRTSPModalVisible, setEditRTSPModalVisible] = useState(false);
   const [editingServer, setEditingServer] = useState<Server | null>(null);
   const [editingRTSPServer, setEditingRTSPServer] = useState<RTSPServer | null>(
     null
@@ -228,10 +220,10 @@ const HomeScreen = () => {
   const handleEditServer = (server: DisplayServer) => {
     if (server.serverType === "nvr") {
       setEditingServer(server as Server);
-      setEditModalVisible(true);
+      setIsSettingsStage(true);
     } else {
       setEditingRTSPServer(server as RTSPServer);
-      setEditRTSPModalVisible(true);
+      setIsSettingsStage(true);
     }
   };
 
@@ -239,45 +231,29 @@ const HomeScreen = () => {
     const server = allServers.find((s) => s.id === serverId);
     if (!server) return;
 
-    Alert.alert(
-      "Удалить сервер",
-      `Вы уверены, что хотите удалить сервер "${server.name}"?`,
-      [
-        { text: "Отмена", style: "cancel" },
-        {
-          text: "Удалить",
-          style: "destructive",
-          onPress: () => {
-            if (server.serverType === "rtsp") {
-              removeRTSPServer(serverId);
-            } else {
-              removeServer(serverId);
-            }
-          },
-        },
-      ]
-    );
+    if (server.serverType === "rtsp") {
+      removeRTSPServer(serverId);
+    } else {
+      removeServer(serverId);
+    }
+
+    handleCloseEditModal();
   };
 
-  const handleSaveEditedServer = (serverData: Partial<Server>) => {
+  const handleSaveEditedServer = (serverData: Partial<DisplayServer>) => {
     if (editingServer) {
-      updateServer(editingServer.id, serverData);
+      updateServer(editingServer.id, serverData as Server);
     }
-  };
-
-  const handleSaveEditedRTSPServer = (serverData: Partial<RTSPServer>) => {
     if (editingRTSPServer) {
-      updateRTSPServer(editingRTSPServer.id, serverData);
+      updateRTSPServer(editingRTSPServer.id, serverData as RTSPServer);
     }
+
+    handleCloseEditModal();
   };
 
   const handleCloseEditModal = () => {
-    setEditModalVisible(false);
+    setIsSettingsStage(false);
     setEditingServer(null);
-  };
-
-  const handleCloseEditRTSPModal = () => {
-    setEditRTSPModalVisible(false);
     setEditingRTSPServer(null);
   };
 
@@ -409,6 +385,7 @@ const HomeScreen = () => {
 
   return (
     <>
+      <Header />
       {isSettingsStage ? (
         <Animated.View
           key={isSettingsStage ? "settingsStage" : "homeStage"}
@@ -416,8 +393,12 @@ const HomeScreen = () => {
           exiting={SlideOutRight.duration(300)}
           style={styles.settingsStage}
         >
-          <Header />
-          <CameraSettings />
+          <CameraSettings
+            server={(editingServer || editingRTSPServer) as DisplayServer}
+            onBack={handleCloseEditModal}
+            onSave={handleSaveEditedServer}
+            handleDeleteCamera={handleDeleteServer}
+          />
         </Animated.View>
       ) : (
         <Animated.View
@@ -450,20 +431,6 @@ const HomeScreen = () => {
               ListFooterComponent={() => <ProductCard />}
             />
           </View>
-
-          <EditServerModal
-            visible={editModalVisible}
-            server={editingServer}
-            onDismiss={handleCloseEditModal}
-            onSave={handleSaveEditedServer}
-          />
-
-          <EditRTSPModal
-            visible={editRTSPModalVisible}
-            rtspServer={editingRTSPServer}
-            onDismiss={handleCloseEditRTSPModal}
-            onSave={handleSaveEditedRTSPServer}
-          />
 
           <CreateServerModal
             visible={createModalVisible}
@@ -524,7 +491,7 @@ const styles = StyleSheet.create({
   welcomeCard: {},
   serversListContainer: {
     flex: 1,
-    marginTop: 12,
+    paddingTop: 12,
   },
   serversList: {
     gap: 12,

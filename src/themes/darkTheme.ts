@@ -24,5 +24,6 @@ export const darkColdTheme = {
     inverseSurface: "#E8EAF6",
     inverseOnSurface: "#1A1A1F",
     inversePrimary: "#1976D2",
+    scrim: "#CFCFCF",
   },
 };

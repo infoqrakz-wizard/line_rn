@@ -1,14 +1,15 @@
 import React from "react";
-import { View, StyleSheet, TouchableOpacity, Image } from "react-native";
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  Dimensions,
+} from "react-native";
 import { Card, Text, useTheme } from "react-native-paper";
-import { Server } from "../store/serverStore";
-import { RTSPServer } from "../store/rtspStore";
-import { CameraTabIcon, SettingIcon, ShieldIcon } from "../icons";
+import { DisplayServer } from "../store/serverStore";
+import { SettingIcon, ShieldIcon } from "../icons";
 import { Icon } from "react-native-paper";
-
-type DisplayServer =
-  | (Server & { serverType: "nvr" })
-  | (RTSPServer & { serverType: "rtsp" });
 
 interface ServerCardProps {
   server: DisplayServer;
@@ -29,6 +30,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
 
   const handleEdit = () => {
     onEdit(server);
+    onSettings?.();
   };
 
   const handleDelete = () => {
@@ -53,7 +55,12 @@ const ServerCard: React.FC<ServerCardProps> = ({
           {title}
         </Text>
         <Text
-          style={[styles.contentText, { color: theme.colors.onBackground }]}
+          style={[
+            styles.contentValueText,
+            { color: theme.colors.onBackground },
+          ]}
+          ellipsizeMode="tail"
+          numberOfLines={1}
         >
           {value}
         </Text>
@@ -109,7 +116,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
             {server.url !== "name265d0000" && (
               <TouchableOpacity
                 activeOpacity={0.8}
-                onPress={onSettings}
+                onPress={handleEdit}
                 disabled={!onSettings}
               >
                 <SettingIcon />
@@ -212,6 +219,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   contentText: {},
+  contentValueText: {
+    marginLeft: 12,
+    width: Dimensions.get("window").width * 0.5,
+    textAlign: "right",
+  },
   contentItem: {
     flexDirection: "row",
     alignItems: "center",

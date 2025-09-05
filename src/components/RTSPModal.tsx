@@ -84,10 +84,17 @@ const RTSPModal: React.FC<RTSPModalProps> = ({
             label="Название сервера"
             value={serverName}
             onChangeText={setServerName}
+            autoCapitalize="none"
             mode="outlined"
             style={styles.input}
             error={!!errors.serverName}
             placeholder="Например: IP камера 1"
+            contentStyle={{
+              color: theme.colors.onBackground,
+            }}
+            theme={{
+              roundness: 10,
+            }}
           />
           {errors.serverName && (
             <Text style={[styles.errorText, { color: theme.colors.error }]}>
@@ -106,6 +113,12 @@ const RTSPModal: React.FC<RTSPModalProps> = ({
             autoCapitalize="none"
             autoCorrect={false}
             multiline={false}
+            contentStyle={{
+              color: theme.colors.onBackground,
+            }}
+            theme={{
+              roundness: 10,
+            }}
           />
           {errors.rtspUrl && (
             <Text style={[styles.errorText, { color: theme.colors.error }]}>
