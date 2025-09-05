@@ -374,13 +374,15 @@ const HomeScreen = () => {
   );
 
   const renderServerCard = ({ item }: { item: DisplayServer }) => (
-    <ServerCard
-      server={item}
-      onPress={handleServerPress}
-      onEdit={handleEditServer}
-      onDelete={handleDeleteServer}
-      onSettings={handleSettingsStage}
-    />
+    <View style={{ width: "100%" }}>
+      <ServerCard
+        server={item}
+        onPress={handleServerPress}
+        onEdit={handleEditServer}
+        onDelete={handleDeleteServer}
+        onSettings={handleSettingsStage}
+      />
+    </View>
   );
 
   return (
@@ -390,7 +392,7 @@ const HomeScreen = () => {
         <Animated.View
           key={isSettingsStage ? "settingsStage" : "homeStage"}
           entering={SlideInRight.duration(300)}
-          exiting={SlideOutRight.duration(300)}
+          exiting={SlideOutLeft.duration(300)}
           style={styles.settingsStage}
         >
           <CameraSettings
@@ -419,14 +421,14 @@ const HomeScreen = () => {
               style={styles.serversListContainer}
               contentContainerStyle={styles.serversList}
               ListHeaderComponent={() => (
-                <>
+                <View style={{ width: "100%" }}>
                   <ServerCard
                     server={testServer}
                     onPress={() => {}}
                     onEdit={() => {}}
                     onDelete={() => {}}
                   />
-                </>
+                </View>
               )}
               ListFooterComponent={() => <ProductCard />}
             />

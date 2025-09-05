@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import { Card, Text, useTheme } from "react-native-paper";
 import { DisplayServer } from "../store/serverStore";
-import { SettingIcon, ShieldIcon } from "../icons";
+import { EventFourthIcon, SettingIcon, ShieldIcon } from "../icons";
 import { Icon } from "react-native-paper";
 
 interface ServerCardProps {
@@ -33,10 +33,6 @@ const ServerCard: React.FC<ServerCardProps> = ({
     onSettings?.();
   };
 
-  const handleDelete = () => {
-    onDelete(server.id);
-  };
-
   const getStatusColor = () => {
     return { backgroundColor: "#84E3AD59", textColor: "#21965399" };
   };
@@ -54,16 +50,18 @@ const ServerCard: React.FC<ServerCardProps> = ({
         >
           {title}
         </Text>
-        <Text
-          style={[
-            styles.contentValueText,
-            { color: theme.colors.onBackground },
-          ]}
-          ellipsizeMode="tail"
-          numberOfLines={1}
-        >
-          {value}
-        </Text>
+        <View style={styles.contentValueContainer}>
+          <Text
+            style={[
+              styles.contentValueText,
+              { color: theme.colors.onBackground },
+            ]}
+            ellipsizeMode="tail"
+            numberOfLines={1}
+          >
+            {value}
+          </Text>
+        </View>
       </View>
     );
   };
@@ -71,7 +69,6 @@ const ServerCard: React.FC<ServerCardProps> = ({
   return (
     <Card
       style={[styles.card, { backgroundColor: theme.colors.primaryContainer }]}
-      onPress={() => onPress(server)}
       mode="contained"
     >
       <Card.Content style={styles.cardContent}>
@@ -106,65 +103,106 @@ const ServerCard: React.FC<ServerCardProps> = ({
             <ShieldIcon />
           </View>
         </View>
-        <View style={styles.content}>
-          {renderContent("IP адрес", server.url)}
-          {renderContent("Дней архива", "14")}
-          {renderContent("Количество камер", "13")}
-        </View>
-        <View style={styles.footer}>
-          <View style={styles.footerCameraInfo}>
-            {server.url !== "name265d0000" && (
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={handleEdit}
-                disabled={!onSettings}
-              >
-                <SettingIcon />
-              </TouchableOpacity>
-            )}
-          </View>
-          <View style={styles.footerCameraInfo}>
-            {Array.from({ length: 3 }).map((_, index) => (
-              <>
-                <Image
-                  source={require("../../assets/cameraTemplate.png")}
-                  resizeMode="cover"
-                  style={[
-                    styles.footerCameraInfoItem,
-                    {
-                      zIndex: 100 - index - 1,
-                      right: (index + 1) * 50 - 12 * (index + 1),
-                      borderLeftWidth: 2,
-                      borderTopWidth: 2,
-                      borderBottomWidth: 2,
-                      borderColor: theme.colors.primaryContainer,
-                    },
-                  ]}
-                />
-                {index === 2 && (
+
+        {server.serverType === "nvr" ? (
+          <>
+            <View style={styles.content}>
+              {renderContent("IP адрес", server.url)}
+              {renderContent("Дней архива", "14")}
+              {renderContent("Количество камер", "13")}
+            </View>
+            <View style={styles.footer}>
+              <View style={styles.footerCameraInfo}>
+                {server.url !== "name265d0000" && (
                   <TouchableOpacity
-                    style={[
-                      styles.footerCameraInfoItemTouchable,
-                      {
-                        backgroundColor: theme.colors.onBackground,
-                        zIndex: 100,
-                        borderLeftWidth: 2,
-                        borderLeftColor: theme.colors.primaryContainer,
-                      },
-                    ]}
                     activeOpacity={0.8}
+                    onPress={handleEdit}
+                    disabled={!onSettings}
                   >
-                    <Icon
-                      source="arrow-right"
-                      size={20}
-                      color={theme.colors.primaryContainer}
-                    />
+                    <SettingIcon />
                   </TouchableOpacity>
                 )}
-              </>
-            ))}
+              </View>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => onPress(server)}
+                style={styles.footerCameraInfo}
+              >
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <>
+                    <Image
+                      source={require("../../assets/cameraTemplate.png")}
+                      resizeMode="cover"
+                      style={[
+                        styles.footerCameraInfoItem,
+                        {
+                          zIndex: 100 - index - 1,
+                          right: (index + 1) * 50 - 12 * (index + 1),
+                          borderLeftWidth: 2,
+                          borderTopWidth: 2,
+                          borderBottomWidth: 2,
+                          borderColor: theme.colors.primaryContainer,
+                        },
+                      ]}
+                    />
+                    {index === 2 && (
+                      <View
+                        style={[
+                          styles.footerCameraInfoItemTouchable,
+                          {
+                            backgroundColor: theme.colors.onBackground,
+                            zIndex: 100,
+                            borderLeftWidth: 2,
+                            borderLeftColor: theme.colors.primaryContainer,
+                          },
+                        ]}
+                      >
+                        <Icon
+                          source="arrow-right"
+                          size={20}
+                          color={theme.colors.primaryContainer}
+                        />
+                      </View>
+                    )}
+                  </>
+                ))}
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : (
+          <View style={styles.rtspContainer}>
+            <View style={styles.content}>
+              {renderContent("IP адрес", server.url)}
+              {renderContent("Дней архива", "14")}
+              {renderContent("Количество камер", "13")}
+              {server.url !== "name265d0000" && (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={handleEdit}
+                  disabled={!onSettings}
+                  style={styles.settingsIcon}
+                >
+                  <SettingIcon />
+                </TouchableOpacity>
+              )}
+            </View>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => onPress(server)}
+              style={styles.rtspCameraInfoItemContainer}
+            >
+              <Image
+                source={require("../../assets/cameraTemplate.png")}
+                resizeMode="cover"
+                style={styles.rtspCameraInfoItem}
+              />
+              <View style={styles.overlay}>
+                <EventFourthIcon fill={theme.colors.onPrimary} />
+                <Text style={styles.overlayText}>Смотреть все</Text>
+              </View>
+            </TouchableOpacity>
           </View>
-        </View>
+        )}
       </Card.Content>
     </Card>
   );
@@ -174,10 +212,12 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 12,
     elevation: 4,
+    flex: 1,
   },
   cardContent: {
     paddingVertical: 16,
     gap: 20,
+    flex: 1,
   },
   header: {
     flexDirection: "row",
@@ -217,17 +257,24 @@ const styles = StyleSheet.create({
   },
   content: {
     gap: 8,
+    flex: 1,
   },
-  contentText: {},
+  settingsIcon: {
+    marginTop: 12,
+  },
+  contentText: {
+    flex: 0,
+  },
+  contentValueContainer: {
+    flex: 1,
+    marginLeft: 16,
+  },
   contentValueText: {
-    marginLeft: 12,
-    width: Dimensions.get("window").width * 0.5,
     textAlign: "right",
   },
   contentItem: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     paddingBottom: 4,
   },
   footer: {
@@ -260,6 +307,37 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 12,
+  },
+  rtspContainer: {
+    gap: 24,
+    flexDirection: "row",
+    flex: 1,
+  },
+  rtspCameraInfoItemContainer: {
+    position: "relative",
+  },
+  rtspCameraInfoItem: {
+    width: 130,
+    height: 130,
+    borderRadius: 4,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    width: 130,
+    height: 130,
+    borderRadius: 4,
+  },
+  overlayText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  overlayIcon: {
+    width: 20,
+    height: 20,
   },
 });
 

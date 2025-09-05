@@ -168,18 +168,17 @@ const CameraSettings = ({
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} activeOpacity={0.8}>
-            <Icon
-              source="chevron-left"
-              size={32}
-              color={theme.colors.outline}
-            />
-          </TouchableOpacity>
+        <TouchableOpacity
+          onPress={onBack}
+          activeOpacity={0.8}
+          style={styles.header}
+        >
+          <Icon source="chevron-left" size={32} color={theme.colors.outline} />
           <Text style={[styles.title, { color: theme.colors.onBackground }]}>
             {server.name}
           </Text>
-        </View>
+        </TouchableOpacity>
+
         <View style={styles.content}>
           {server.serverType === "nvr" ? (
             <>
@@ -444,11 +443,11 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
   },
   title: {
     fontSize: 18,
     fontWeight: "bold",
+    marginLeft: 10,
   },
   content: {
     marginTop: 20,
