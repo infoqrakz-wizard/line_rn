@@ -13,7 +13,7 @@ export const darkColdTheme = {
     surface: "#1A1A1F",
     surfaceVariant: "#2A2A3A",
     background: "#F1F1F1",
-    error: "#CF6679",
+    error: "#E22A33",
     errorContainer: "#B00020",
     onPrimary: "#FFFFFF",
     onSecondary: "#000000",

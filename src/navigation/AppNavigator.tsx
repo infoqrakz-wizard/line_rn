@@ -11,12 +11,14 @@ import NotificationScreen from "../screens/NotificationScreen";
 import QRScannerScreen from "../screens/QRScannerScreen";
 import CamerasScreen from "../screens/CamerasScreen";
 import RTSPScreen from "../screens/RTSPScreen";
+import CameraScreen from "../screens/CameraScreen";
 
 import {
   ProfileTabIcon,
   CameraTabIcon,
   GalleryTabIcon,
   NotificationTabIcon,
+  ServersTabIcon,
 } from "../icons";
 
 export type RootStackParamList = {
@@ -31,6 +33,7 @@ export type TabParamList = {
   Camera: undefined;
   Gallery: undefined;
   Notifications: undefined;
+  Servers: undefined;
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -52,6 +55,8 @@ const TabNavigator = () => {
               return <ProfileTabIcon {...iconProps} />;
             case "Camera":
               return <CameraTabIcon {...iconProps} />;
+            case "Servers":
+              return <ServersTabIcon {...iconProps} />;
             case "Gallery":
               return <GalleryTabIcon {...iconProps} />;
             case "Notifications":
@@ -86,9 +91,16 @@ const TabNavigator = () => {
       />
       <Tab.Screen
         name="Camera"
-        component={HomeScreen}
+        component={CameraScreen}
         options={{
           title: "Камеры",
+        }}
+      />
+      <Tab.Screen
+        name="Servers"
+        component={HomeScreen}
+        options={{
+          title: "Серверы",
         }}
       />
       <Tab.Screen
@@ -102,7 +114,7 @@ const TabNavigator = () => {
         name="Notifications"
         component={NotificationScreen}
         options={{
-          title: "Уведомления",
+          title: "Новое",
         }}
       />
     </Tab.Navigator>

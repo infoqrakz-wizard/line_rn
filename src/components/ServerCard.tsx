@@ -15,6 +15,7 @@ interface ServerCardProps {
   onPress: (server: DisplayServer) => void;
   onEdit: (server: DisplayServer) => void;
   onDelete: (serverId: string) => void;
+  onSettings?: () => void;
 }
 
 const ServerCard: React.FC<ServerCardProps> = ({
@@ -22,6 +23,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
   onPress,
   onEdit,
   onDelete,
+  onSettings,
 }) => {
   const theme = useTheme();
 
@@ -94,25 +96,25 @@ const ServerCard: React.FC<ServerCardProps> = ({
             </Text>
           </View>
           <View style={styles.iconContainer}>
-            <TouchableOpacity activeOpacity={0.8}>
-              <SettingIcon />
-            </TouchableOpacity>
             <ShieldIcon />
           </View>
         </View>
         <View style={styles.content}>
           {renderContent("IP адрес", server.url)}
           {renderContent("Дней архива", "14")}
-          {renderContent("Режим охраны", "Вкл")}
+          {renderContent("Количество камер", "13")}
         </View>
         <View style={styles.footer}>
           <View style={styles.footerCameraInfo}>
-            <CameraTabIcon />
-            <Text
-              style={[styles.footerText, { color: theme.colors.onBackground }]}
-            >
-              13 Камер
-            </Text>
+            {server.url !== "name265d0000" && (
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={onSettings}
+                disabled={!onSettings}
+              >
+                <SettingIcon />
+              </TouchableOpacity>
+            )}
           </View>
           <View style={styles.footerCameraInfo}>
             {Array.from({ length: 3 }).map((_, index) => (
@@ -186,9 +188,8 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   iconContainer: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    justifyContent: "flex-end",
   },
   statusContainer: {
     flexDirection: "row",
@@ -217,16 +218,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingBottom: 4,
   },
-
   footer: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
   footerCameraInfo: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 8,
     marginLeft: 8,
   },
   footerCameraInfoItemContainer: {

@@ -31,6 +31,13 @@ import EditRTSPModal from "../components/EditRTSPModal";
 import { Camera } from "expo-camera";
 import Header from "../components/Header";
 import ProductCard from "../components/ProductCard";
+import Animated, {
+  SlideInLeft,
+  SlideInRight,
+  SlideOutLeft,
+  SlideOutRight,
+} from "react-native-reanimated";
+import CameraSettings from "../components/CameraSettings";
 
 type DisplayServer =
   | (Server & { serverType: "nvr" })
@@ -56,6 +63,7 @@ const HomeScreen = () => {
   const [editingRTSPServer, setEditingRTSPServer] = useState<RTSPServer | null>(
     null
   );
+  const [isSettingsStage, setIsSettingsStage] = useState(false);
   const bottomSheetRef = useRef<BottomSheet>(null);
   const snapPoints = useMemo(() => [280], []);
   const theme = useTheme();
@@ -84,17 +92,17 @@ const HomeScreen = () => {
     const lastUsedServer = getLastUsedServer();
     const lastUsedServerTime = getLastUsedServerTime();
 
-    if (lastUsedRTSPServerTime && lastUsedServerTime) {
-      if (lastUsedRTSPServerTime > lastUsedServerTime && lastUsedRTSPServer) {
-        navigation.navigate("RTSP", { rtspServerId: lastUsedRTSPServer });
-      } else if (lastUsedServer) {
-        navigation.navigate("Cameras", { serverId: lastUsedServer });
-      }
-    } else if (lastUsedRTSPServerTime && lastUsedRTSPServer) {
-      navigation.navigate("RTSP", { rtspServerId: lastUsedRTSPServer });
-    } else if (lastUsedServerTime && lastUsedServer) {
-      navigation.navigate("Cameras", { serverId: lastUsedServer });
-    }
+    // if (lastUsedRTSPServerTime && lastUsedServerTime) {
+    //   if (lastUsedRTSPServerTime > lastUsedServerTime && lastUsedRTSPServer) {
+    //     navigation.navigate("RTSP", { rtspServerId: lastUsedRTSPServer });
+    //   } else if (lastUsedServer) {
+    //     navigation.navigate("Cameras", { serverId: lastUsedServer });
+    //   }
+    // } else if (lastUsedRTSPServerTime && lastUsedRTSPServer) {
+    //   navigation.navigate("RTSP", { rtspServerId: lastUsedRTSPServer });
+    // } else if (lastUsedServerTime && lastUsedServer) {
+    //   navigation.navigate("Cameras", { serverId: lastUsedServer });
+    // }
   }, [
     navigation,
     getLastUsedServer,
@@ -102,6 +110,14 @@ const HomeScreen = () => {
     getLastUsedServerTime,
     getLastUsedRTSPServerTime,
   ]);
+
+  const handleSettingsStage = () => {
+    setIsSettingsStage(true);
+  };
+
+  const handleCloseSettingsStage = () => {
+    setIsSettingsStage(false);
+  };
 
   const handleChooseFromGallery = async () => {
     try {
@@ -387,93 +403,113 @@ const HomeScreen = () => {
       onPress={handleServerPress}
       onEdit={handleEditServer}
       onDelete={handleDeleteServer}
+      onSettings={handleSettingsStage}
     />
   );
 
   return (
-    <View
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
-    >
-      <Header />
-      <View style={[styles.content]}>
-        <FlatList
-          data={allServers}
-          renderItem={renderServerCard}
-          keyExtractor={(item) => item.id}
-          showsVerticalScrollIndicator={false}
-          style={styles.serversListContainer}
-          contentContainerStyle={styles.serversList}
-          ListHeaderComponent={() => (
-            <>
-              <ServerCard
-                server={testServer}
-                onPress={() => {}}
-                onEdit={() => {}}
-                onDelete={() => {}}
-              />
-            </>
-          )}
-          ListFooterComponent={() => <ProductCard />}
-        />
-      </View>
-
-      <EditServerModal
-        visible={editModalVisible}
-        server={editingServer}
-        onDismiss={handleCloseEditModal}
-        onSave={handleSaveEditedServer}
-      />
-
-      <EditRTSPModal
-        visible={editRTSPModalVisible}
-        rtspServer={editingRTSPServer}
-        onDismiss={handleCloseEditRTSPModal}
-        onSave={handleSaveEditedRTSPServer}
-      />
-
-      <CreateServerModal
-        visible={createModalVisible}
-        onDismiss={handleCloseCreateModal}
-        onSave={handleSaveNewServer}
-      />
-
-      <RTSPModal
-        visible={rtspModalVisible}
-        onDismiss={handleCloseRTSPModal}
-        onSave={handleSaveRTSPServer}
-      />
-
-      <TouchableOpacity
-        style={[
-          styles.addButton,
-          { backgroundColor: theme.colors.secondaryContainer },
-        ]}
-        onPress={handleBottomSheetOpen}
-        activeOpacity={0.8}
-      >
-        <Icon source="plus" size={24} color={theme.colors.secondary} />
-        <Text
-          variant="bodyMedium"
-          style={{ color: theme.colors.secondary, marginLeft: 8 }}
+    <>
+      {isSettingsStage ? (
+        <Animated.View
+          key={isSettingsStage ? "settingsStage" : "homeStage"}
+          entering={SlideInRight.duration(300)}
+          exiting={SlideOutRight.duration(300)}
+          style={styles.settingsStage}
         >
-          Добавить сервер
-        </Text>
-      </TouchableOpacity>
+          <Header />
+          <CameraSettings />
+        </Animated.View>
+      ) : (
+        <Animated.View
+          key={isSettingsStage ? "settingsStage" : "homeStage"}
+          entering={SlideInRight.duration(300)}
+          exiting={SlideOutLeft.duration(300)}
+          style={[
+            styles.container,
+            { backgroundColor: theme.colors.background },
+          ]}
+        >
+          <View style={[styles.content]}>
+            <FlatList
+              data={allServers}
+              renderItem={renderServerCard}
+              keyExtractor={(item) => item.id}
+              showsVerticalScrollIndicator={false}
+              style={styles.serversListContainer}
+              contentContainerStyle={styles.serversList}
+              ListHeaderComponent={() => (
+                <>
+                  <ServerCard
+                    server={testServer}
+                    onPress={() => {}}
+                    onEdit={() => {}}
+                    onDelete={() => {}}
+                  />
+                </>
+              )}
+              ListFooterComponent={() => <ProductCard />}
+            />
+          </View>
 
-      <BottomSheet
-        ref={bottomSheetRef}
-        index={-1}
-        snapPoints={snapPoints}
-        backgroundStyle={{
-          backgroundColor: theme.colors.primaryContainer,
-        }}
-        handleIndicatorStyle={{ height: 0 }}
-        enablePanDownToClose
-        backdropComponent={renderBackdrop}
-      >
-        {renderBottomSheetContent()}
-      </BottomSheet>
-    </View>
+          <EditServerModal
+            visible={editModalVisible}
+            server={editingServer}
+            onDismiss={handleCloseEditModal}
+            onSave={handleSaveEditedServer}
+          />
+
+          <EditRTSPModal
+            visible={editRTSPModalVisible}
+            rtspServer={editingRTSPServer}
+            onDismiss={handleCloseEditRTSPModal}
+            onSave={handleSaveEditedRTSPServer}
+          />
+
+          <CreateServerModal
+            visible={createModalVisible}
+            onDismiss={handleCloseCreateModal}
+            onSave={handleSaveNewServer}
+          />
+
+          <RTSPModal
+            visible={rtspModalVisible}
+            onDismiss={handleCloseRTSPModal}
+            onSave={handleSaveRTSPServer}
+          />
+
+          <TouchableOpacity
+            style={[
+              styles.addButton,
+              { backgroundColor: theme.colors.secondaryContainer },
+            ]}
+            onPress={handleBottomSheetOpen}
+            activeOpacity={0.8}
+          >
+            <Icon source="plus" size={24} color={theme.colors.secondary} />
+            <Text
+              variant="bodyMedium"
+              style={{ color: theme.colors.secondary, marginLeft: 8 }}
+            >
+              Добавить сервер
+            </Text>
+          </TouchableOpacity>
+
+          <BottomSheet
+            ref={bottomSheetRef}
+            index={-1}
+            snapPoints={snapPoints}
+            backgroundStyle={{
+              backgroundColor: theme.colors.primaryContainer,
+            }}
+            handleIndicatorStyle={{ height: 0 }}
+            enablePanDownToClose
+            backdropComponent={renderBackdrop}
+          >
+            {renderBottomSheetContent()}
+          </BottomSheet>
+        </Animated.View>
+      )}
+    </>
   );
 };
 
@@ -560,6 +596,9 @@ const styles = StyleSheet.create({
     borderBottomColor: "#F1F1F1",
   },
   bottomSheetMenuItemText: {
+    flex: 1,
+  },
+  settingsStage: {
     flex: 1,
   },
 });
