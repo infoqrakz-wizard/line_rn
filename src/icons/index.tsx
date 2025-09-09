@@ -1,4 +1,13 @@
-import { Svg, Path, G, Mask, Defs, ClipPath, SvgProps } from "react-native-svg";
+import {
+  Svg,
+  Path,
+  G,
+  Mask,
+  Defs,
+  ClipPath,
+  SvgProps,
+  Rect,
+} from "react-native-svg";
 
 export const LogoIcon = (props: SvgProps) => {
   return (
@@ -221,6 +230,64 @@ export const EventFourthIcon = (props: SvgProps) => {
         strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
+      />
+    </Svg>
+  );
+};
+
+export const GridCameraIcon = (props: SvgProps) => {
+  return (
+    <Svg width={25} height={26} viewBox="0 0 25 26" {...props} fill="none">
+      <Rect
+        y={0.5}
+        width={25}
+        height={12}
+        rx={4}
+        fill={props.fill || "#676767"}
+      />
+      <Rect
+        y={13.5}
+        width={25}
+        height={12}
+        rx={4}
+        fill={props.fill || "#676767"}
+      />
+    </Svg>
+  );
+};
+
+export const GridPhotoIcon = (props: SvgProps) => {
+  return (
+    <Svg width={25} height={26} viewBox="0 0 25 26" {...props} fill="none">
+      <Rect
+        y={0.5}
+        width={12}
+        height={12}
+        rx={4}
+        fill={props.fill || "#676767"}
+      />
+      <Rect
+        x={13}
+        y={0.5}
+        width={12}
+        height={12}
+        rx={4}
+        fill={props.fill || "#676767"}
+      />
+      <Rect
+        y={13.5}
+        width={12}
+        height={12}
+        rx={4}
+        fill={props.fill || "#676767"}
+      />
+      <Rect
+        x={13}
+        y={13.5}
+        width={12}
+        height={12}
+        rx={4}
+        fill={props.fill || "#676767"}
       />
     </Svg>
   );

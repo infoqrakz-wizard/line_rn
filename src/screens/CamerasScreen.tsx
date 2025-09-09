@@ -14,11 +14,15 @@ import {
   NativeScrollEvent,
   NativeSyntheticEvent,
 } from "react-native";
+import {
+  PanGestureHandler,
+  GestureHandlerRootView,
+} from "react-native-gesture-handler";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { RouteProp } from "@react-navigation/native";
 import { Video, ResizeMode } from "expo-av";
 import CachedImage from "expo-cached-image";
-import { Button, Card, Icon, Switch } from "react-native-paper";
+import { Button, Card, Icon, useTheme } from "react-native-paper";
 import { useServerStore } from "../store/serverStore";
 import {
   fetchCameraList,
@@ -34,6 +38,7 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { ReactNativeZoomableView } from "@openspacelabs/react-native-zoomable-view";
+import { GridCameraIcon, GridPhotoIcon } from "../icons";
 
 const MAX_RETRY_ATTEMPTS = 3;
 
@@ -44,6 +49,7 @@ const CamerasScreen = () => {
   const { serverId } = route.params;
   const navigation = useNavigation();
   const { top, bottom } = useSafeAreaInsets();
+  const theme = useTheme();
 
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,9 +83,22 @@ const CamerasScreen = () => {
     end: Date;
   } | null>(null);
 
-  const ITEM_HEIGHT = isPortrait
-    ? (Dimensions.get("screen").height - bottom - top) / 2
-    : Dimensions.get("screen").height - bottom - top;
+  const [viewMode, setViewMode] = useState<1 | 2>(1);
+  const [imageRefreshKey, setImageRefreshKey] = useState(0);
+  const [previousImageRefreshKey, setPreviousImageRefreshKey] = useState(0);
+  const imageRefreshTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const ITEM_HEIGHT = React.useMemo(() => {
+    if (viewMode === 2) {
+      return isPortrait
+        ? (Dimensions.get("screen").height - bottom - top) / 4
+        : (Dimensions.get("screen").height - bottom - top) / 2;
+    } else {
+      return isPortrait
+        ? (Dimensions.get("screen").height - bottom - top) / 2
+        : Dimensions.get("screen").height - bottom - top;
+    }
+  }, [isPortrait, viewMode, bottom, top]);
 
   const server = useServerStore((state) => state.getServer(serverId));
 
@@ -87,21 +106,76 @@ const CamerasScreen = () => {
     (state) => state.saveLastUsedServer
   );
 
-  const groupedCameras = React.useMemo(() => {
-    if (isPortrait) {
-      return cameras.map((camera, index) => ({
-        cameras: [camera],
-        rowIndex: index,
-      }));
-    } else {
-      const groups = [];
-      for (let i = 0; i < cameras.length; i += 2) {
-        const camerasInRow = cameras.slice(i, i + 2);
-        groups.push({ cameras: camerasInRow, rowIndex: Math.floor(i / 2) });
+  const toggleViewMode = useCallback(() => {
+    setViewMode((prev) => (prev === 1 ? 2 : 1));
+  }, []);
+
+  const refreshImages = useCallback(() => {
+    setImageRefreshKey((prev) => {
+      setPreviousImageRefreshKey(prev);
+      return prev + 1;
+    });
+  }, []);
+
+  const handlePanGesture = useCallback(
+    (event: any) => {
+      const { translationX, translationY, x, state } = event.nativeEvent;
+      const screenWidth = Dimensions.get("window").width;
+      const isRightHalf = x > screenWidth * 0.5;
+      const isLeftHalf = x < screenWidth * 0.5;
+
+      const isHorizontalGesture =
+        Math.abs(translationX) > Math.abs(translationY);
+
+      if (state === 5 && isHorizontalGesture) {
+        if (isRightHalf) {
+          if (translationX > 50 && viewMode === 1) {
+            toggleViewMode();
+          } else if (translationX < -50 && viewMode === 2) {
+            toggleViewMode();
+          }
+        } else if (isLeftHalf && translationX > 50) {
+          navigation.goBack();
+        }
       }
-      return groups;
+    },
+    [toggleViewMode, viewMode, navigation]
+  );
+
+  const groupedCameras = React.useMemo(() => {
+    if (viewMode === 2) {
+      const displayedCameras = cameras.slice(0, 8);
+      if (isPortrait) {
+        const groups = [];
+        for (let i = 0; i < displayedCameras.length; i += 2) {
+          const camerasInRow = displayedCameras.slice(i, i + 2);
+          groups.push({ cameras: camerasInRow, rowIndex: Math.floor(i / 2) });
+        }
+        return groups;
+      } else {
+        const groups = [];
+        for (let i = 0; i < displayedCameras.length; i += 4) {
+          const camerasInRow = displayedCameras.slice(i, i + 4);
+          groups.push({ cameras: camerasInRow, rowIndex: Math.floor(i / 4) });
+        }
+        return groups;
+      }
+    } else {
+      if (isPortrait) {
+        return cameras.map((camera, index) => ({
+          cameras: [camera],
+          rowIndex: index,
+        }));
+      } else {
+        const groups = [];
+        for (let i = 0; i < cameras.length; i += 2) {
+          const camerasInRow = cameras.slice(i, i + 2);
+          groups.push({ cameras: camerasInRow, rowIndex: Math.floor(i / 2) });
+        }
+        return groups;
+      }
     }
-  }, [cameras, isPortrait]);
+  }, [cameras, isPortrait, viewMode]);
 
   useEffect(() => {
     const subscription = Dimensions.addEventListener("change", ({ window }) => {
@@ -119,6 +193,23 @@ const CamerasScreen = () => {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (viewMode === 2) {
+      imageRefreshTimer.current = setInterval(refreshImages, 5000);
+    } else {
+      if (imageRefreshTimer.current) {
+        clearInterval(imageRefreshTimer.current);
+        imageRefreshTimer.current = null;
+      }
+    }
+
+    return () => {
+      if (imageRefreshTimer.current) {
+        clearInterval(imageRefreshTimer.current);
+      }
+    };
+  }, [viewMode, refreshImages]);
 
   useEffect(() => {
     const loadCameras = async () => {
@@ -356,19 +447,40 @@ const CamerasScreen = () => {
   );
 
   const renderSingleCamera = (camera: Camera, containerStyle?: any) => {
+    const isGridMode = viewMode === 2;
+
     return (
-      <View style={[styles.cameraContainer, containerStyle]}>
+      <View
+        style={[
+          isGridMode ? styles.cameraContainerGrid : styles.cameraContainer,
+          containerStyle,
+        ]}
+      >
         <CachedImage
+          key={`${imageRefreshKey}`}
           source={{
             uri: buildImageUrl(server!, camera),
-            expiresIn: 600,
+            expiresIn: isGridMode ? 10 : 600,
           }}
-          cacheKey={`camera-${camera.uri}-${camera.name}`}
+          cacheKey={`camera-${camera.uri}-${camera.name}-${imageRefreshKey}`}
           style={styles.backgroundImage}
           resizeMode="stretch"
+          placeholderContent={
+            previousImageRefreshKey >= 0 ? (
+              <CachedImage
+                source={{
+                  uri: buildImageUrl(server!, camera),
+                  expiresIn: isGridMode ? 60 : 3600,
+                }}
+                cacheKey={`camera-${camera.uri}-${camera.name}-${previousImageRefreshKey}`}
+                style={styles.backgroundImage}
+                resizeMode="stretch"
+              />
+            ) : undefined
+          }
         />
 
-        {shouldShowVideos && !videoErrors.get(camera.uri) && (
+        {!isGridMode && shouldShowVideos && !videoErrors.get(camera.uri) && (
           <Pressable
             onPress={() => {
               if (!retryAttempts.get(camera.uri)) {
@@ -390,7 +502,18 @@ const CamerasScreen = () => {
           </Pressable>
         )}
 
-        {!videoErrors.get(camera.uri) &&
+        {isGridMode && (
+          <View style={styles.gridPressable}>
+            <View style={styles.gridOverlay}>
+              <Text style={styles.gridCameraName} numberOfLines={1}>
+                {camera.name}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {!isGridMode &&
+          !videoErrors.get(camera.uri) &&
           retryAttempts.get(camera.uri) &&
           retryAttempts.get(camera.uri)! > 0 && (
             <View style={styles.retryIndicator}>
@@ -400,7 +523,7 @@ const CamerasScreen = () => {
             </View>
           )}
 
-        {videoErrors.get(camera.uri) && (
+        {!isGridMode && videoErrors.get(camera.uri) && (
           <View style={styles.errorOverlay}>
             <Card style={styles.errorCard}>
               <Card.Content style={styles.errorContent}>
@@ -432,22 +555,50 @@ const CamerasScreen = () => {
     index: number;
   }) => {
     const { cameras: camerasInRow } = item;
+    const isGridMode = viewMode === 2;
 
-    if (isPortrait) {
-      return renderSingleCamera(camerasInRow[0], { height: ITEM_HEIGHT });
-    } else {
+    if (isPortrait || (isGridMode && camerasInRow.length <= 2)) {
+      // Portrait режим или Grid режим с 2 камерами в ряд
       return (
         <View style={[styles.rowContainer, { height: ITEM_HEIGHT }]}>
-          {camerasInRow[0] &&
-            renderSingleCamera(
-              camerasInRow[0],
-              styles.cameraContainerLandscape
-            )}
-          {camerasInRow[1] &&
-            renderSingleCamera(
-              camerasInRow[1],
-              styles.cameraContainerLandscape
-            )}
+          {camerasInRow.map((camera, cameraIndex) => (
+            <View
+              key={camera.uri}
+              style={isGridMode ? styles.gridCameraWrapper : { flex: 1 }}
+            >
+              {renderSingleCamera(
+                camera,
+                isGridMode
+                  ? styles.cameraContainerGrid
+                  : camerasInRow.length === 1
+                  ? { height: ITEM_HEIGHT }
+                  : styles.cameraContainerLandscape
+              )}
+            </View>
+          ))}
+        </View>
+      );
+    } else {
+      // Landscape режим с обычными камерами или Grid режим с 4 камерами в ряд
+      return (
+        <View style={[styles.rowContainer, { height: ITEM_HEIGHT }]}>
+          {camerasInRow.map((camera, cameraIndex) => (
+            <View
+              key={camera.uri}
+              style={
+                isGridMode
+                  ? styles.gridCameraWrapper
+                  : styles.cameraContainerLandscape
+              }
+            >
+              {renderSingleCamera(
+                camera,
+                isGridMode
+                  ? styles.cameraContainerGrid
+                  : styles.cameraContainerLandscape
+              )}
+            </View>
+          ))}
         </View>
       );
     }
@@ -483,45 +634,113 @@ const CamerasScreen = () => {
 
   return (
     <>
-      <SafeAreaView style={styles.container}>
-        <StatusBar hidden />
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <PanGestureHandler
+          onHandlerStateChange={handlePanGesture}
+          activeOffsetX={[-30, 30]}
+          failOffsetY={[-50, 50]}
+        >
+          <SafeAreaView style={styles.container}>
+            <StatusBar hidden />
 
-        {!isModalVisible && (
-          <Pressable
-            style={[
-              styles.exitButton,
-              { top: Platform.OS === "ios" ? top : top + 10 },
-            ]}
-            onPress={navigation.goBack}
-          >
-            <Icon source="arrow-left" size={24} color="white" />
-          </Pressable>
-        )}
+            {!isModalVisible && (
+              <Pressable
+                style={[
+                  styles.exitButton,
+                  {
+                    top: Platform.OS === "ios" ? top : top + 10,
+                    backgroundColor: theme.colors.onBackground,
+                  },
+                ]}
+                onPress={navigation.goBack}
+              >
+                <Icon source="arrow-left" size={24} color="white" />
+              </Pressable>
+            )}
 
-        <FlatList
-          data={groupedCameras}
-          keyExtractor={keyExtractor}
-          renderItem={renderCameraRow}
-          decelerationRate={0.95}
-          showsVerticalScrollIndicator={false}
-          onViewableItemsChanged={onViewableItemsChangedRef.current}
-          viewabilityConfig={viewabilityConfig.current}
-          onScroll={handleScroll}
-          scrollEventThrottle={16}
-          removeClippedSubviews={true}
-          maxToRenderPerBatch={2}
-          windowSize={3}
-          initialNumToRender={2}
-          getItemLayout={(_, index) => ({
-            length: ITEM_HEIGHT,
-            offset: ITEM_HEIGHT * index,
-            index,
-          })}
-          pagingEnabled={false}
-          snapToAlignment="start"
-          snapToOffsets={groupedCameras.map((_, index) => index * ITEM_HEIGHT)}
-        />
-      </SafeAreaView>
+            {!isModalVisible && (
+              <View
+                style={[
+                  styles.modeIndicator,
+                  {
+                    top: Platform.OS === "ios" ? top + 40 : top + 50,
+                    backgroundColor: theme.colors.onBackground,
+                  },
+                ]}
+              >
+                <Text style={styles.modeText}>
+                  {viewMode === 1 ? "Видео режим" : "Режим сетки"}
+                </Text>
+              </View>
+            )}
+
+            {!isModalVisible && (
+              <View
+                style={[
+                  styles.modeToggleContainer,
+                  {
+                    top: Platform.OS === "ios" ? top : top + 10,
+                  },
+                ]}
+              >
+                <Pressable
+                  style={[
+                    styles.modeToggleButton,
+                    { backgroundColor: theme.colors.onBackground },
+                  ]}
+                  onPress={() => setViewMode(1)}
+                >
+                  <GridCameraIcon
+                    fill={viewMode === 1 ? "#CFCFCF" : "#676767"}
+                    width={20}
+                    height={20}
+                  />
+                </Pressable>
+
+                <Pressable
+                  style={[
+                    styles.modeToggleButton,
+                    { backgroundColor: theme.colors.onBackground },
+                  ]}
+                  onPress={() => setViewMode(2)}
+                >
+                  <GridPhotoIcon
+                    fill={viewMode === 2 ? "#CFCFCF" : "#676767"}
+                    width={20}
+                    height={20}
+                  />
+                </Pressable>
+              </View>
+            )}
+
+            <FlatList
+              data={groupedCameras}
+              keyExtractor={keyExtractor}
+              renderItem={renderCameraRow}
+              decelerationRate={0.95}
+              showsVerticalScrollIndicator={false}
+              onViewableItemsChanged={onViewableItemsChangedRef.current}
+              viewabilityConfig={viewabilityConfig.current}
+              onScroll={handleScroll}
+              scrollEventThrottle={16}
+              removeClippedSubviews={true}
+              maxToRenderPerBatch={viewMode === 2 ? 4 : 2}
+              windowSize={viewMode === 2 ? 2 : 3}
+              initialNumToRender={viewMode === 2 ? 4 : 2}
+              getItemLayout={(_, index) => ({
+                length: ITEM_HEIGHT,
+                offset: ITEM_HEIGHT * index,
+                index,
+              })}
+              pagingEnabled={false}
+              snapToAlignment="start"
+              snapToOffsets={groupedCameras.map(
+                (_, index) => index * ITEM_HEIGHT
+              )}
+            />
+          </SafeAreaView>
+        </PanGestureHandler>
+      </GestureHandlerRootView>
 
       <Modal
         visible={isModalVisible}
@@ -662,6 +881,35 @@ const styles = StyleSheet.create({
     width: "50%",
     margin: 0,
   },
+  cameraContainerGrid: {
+    flex: 1,
+    position: "relative",
+    overflow: "hidden",
+    margin: 1,
+  },
+  gridCameraWrapper: {
+    flex: 1,
+    margin: 1,
+  },
+  gridPressable: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: "100%",
+    height: "100%",
+    justifyContent: "flex-end",
+  },
+  gridOverlay: {
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  gridCameraName: {
+    color: "white",
+    fontSize: 10,
+    fontWeight: "500",
+    textAlign: "center",
+  },
   videoContainer: {
     flex: 1,
   },
@@ -766,6 +1014,23 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 20,
     zIndex: 1,
+    borderRadius: 50,
+    padding: 2,
+  },
+  modeIndicator: {
+    position: "absolute",
+    left: 20,
+    zIndex: 2,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  modeText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
+    opacity: 0.9,
   },
   retryIndicator: {
     position: "absolute",
@@ -804,6 +1069,19 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "center",
     opacity: 0.9,
+  },
+  modeToggleContainer: {
+    position: "absolute",
+    right: 20,
+    zIndex: 2,
+    flexDirection: "row",
+    gap: 8,
+  },
+  modeToggleButton: {
+    borderRadius: 8,
+    padding: 8,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
 

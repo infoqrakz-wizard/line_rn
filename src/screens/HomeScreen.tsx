@@ -57,6 +57,7 @@ const HomeScreen = () => {
   );
   const [isSettingsStage, setIsSettingsStage] = useState(false);
   const bottomSheetRef = useRef<BottomSheet>(null);
+  const isFirstLaunch = useRef(true);
   const snapPoints = useMemo(() => [280], []);
   const theme = useTheme();
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
@@ -95,6 +96,10 @@ const HomeScreen = () => {
     // } else if (lastUsedServerTime && lastUsedServer) {
     //   navigation.navigate("Cameras", { serverId: lastUsedServer });
     // }
+
+    if (isFirstLaunch.current) {
+      isFirstLaunch.current = false;
+    }
   }, [
     navigation,
     getLastUsedServer,
@@ -405,7 +410,9 @@ const HomeScreen = () => {
       ) : (
         <Animated.View
           key={isSettingsStage ? "settingsStage" : "homeStage"}
-          entering={SlideInRight.duration(300)}
+          entering={
+            !isFirstLaunch.current ? SlideInLeft.duration(300) : undefined
+          }
           exiting={SlideOutLeft.duration(300)}
           style={[
             styles.container,
