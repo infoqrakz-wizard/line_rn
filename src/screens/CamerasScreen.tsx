@@ -122,7 +122,6 @@ const CamerasScreen = () => {
       const { translationX, translationY, x, state } = event.nativeEvent;
       const screenWidth = Dimensions.get("window").width;
       const isRightHalf = x > screenWidth * 0.5;
-      const isLeftHalf = x < screenWidth * 0.5;
 
       const isHorizontalGesture =
         Math.abs(translationX) > Math.abs(translationY);
@@ -134,8 +133,6 @@ const CamerasScreen = () => {
           } else if (translationX < -50 && viewMode === 2) {
             toggleViewMode();
           }
-        } else if (isLeftHalf && translationX > 50) {
-          navigation.goBack();
         }
       }
     },
