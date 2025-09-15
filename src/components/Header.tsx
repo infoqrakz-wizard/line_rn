@@ -12,10 +12,13 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LogoIcon } from "../icons";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import { useUserStore } from "../store/userStore";
 
 const Header = () => {
   const { top } = useSafeAreaInsets();
   const theme = useTheme();
+  const { register, login, logout, user, isAuth } = useUserStore();
+
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isResetPasswordModalVisible, setIsResetPasswordModalVisible] =
@@ -26,12 +29,38 @@ const Header = () => {
   const [isCompleteRegisterModalVisible, setIsCompleteRegisterModalVisible] =
     useState(false);
 
-  const showModal = () => {
-    setIsModalVisible(true);
+  const [loginField, setLoginField] = useState("");
+  const [passwordField, setPasswordField] = useState("");
+  const [error, setError] = useState("");
+
+  const handleRegister = async () => {
+    try {
+      setError("");
+      await register(loginField, passwordField);
+      setIsRegisterModalVisible(false);
+      setLoginField("");
+      setPasswordField("");
+    } catch (error: any) {
+      setError(error.response.data.message);
+      // TODO: Handle error
+    }
   };
 
-  const hideModal = () => {
-    setIsModalVisible(false);
+  const handleLogin = async () => {
+    try {
+      setError("");
+      await login(loginField, passwordField);
+      setIsModalVisible(false);
+      setLoginField("");
+      setPasswordField("");
+    } catch (error: any) {
+      setError(error.response.data.message);
+      // TODO: Handle error
+    }
+  };
+
+  const showModal = () => {
+    setIsModalVisible(true);
   };
 
   const showResetPasswordModal = () => {
@@ -55,18 +84,15 @@ const Header = () => {
   };
 
   const showRegisterModal = () => {
+    setError("");
     setIsModalVisible(false);
     setIsRegisterModalVisible(true);
   };
 
   const hideRegisterModal = () => {
+    setError("");
     setIsRegisterModalVisible(false);
     setIsModalVisible(true);
-  };
-
-  const showCompleteRegisterModal = () => {
-    setIsRegisterModalVisible(false);
-    setIsCompleteRegisterModalVisible(true);
   };
 
   const hideCompleteRegisterModal = () => {
@@ -83,9 +109,22 @@ const Header = () => {
         ]}
       >
         <LogoIcon />
-        <Button onPress={showModal} mode="contained" style={styles.button}>
-          <Text style={styles.buttonText}>Войти</Text>
-        </Button>
+        {isAuth ? (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            hitSlop={10}
+            style={[
+              styles.profileButton,
+              { backgroundColor: theme.colors.onBackground },
+            ]}
+          >
+            <Text style={styles.buttonText}>НД</Text>
+          </TouchableOpacity>
+        ) : (
+          <Button onPress={showModal} mode="contained" style={styles.button}>
+            <Text style={styles.buttonText}>Войти</Text>
+          </Button>
+        )}
       </View>
 
       <Portal>
@@ -139,6 +178,7 @@ const Header = () => {
           </Dialog.Title>
           <Dialog.Content>
             <TextInput
+              autoCapitalize="none"
               placeholder="Логин"
               label={
                 <Text style={{ color: theme.colors.onBackground }}>
@@ -153,8 +193,11 @@ const Header = () => {
               }}
               mode="outlined"
               style={styles.input}
+              value={loginField}
+              onChangeText={setLoginField}
             />
             <TextInput
+              autoCapitalize="none"
               placeholder="Пароль"
               label={
                 <Text style={{ color: theme.colors.onBackground }}>Пароль</Text>
@@ -172,9 +215,16 @@ const Header = () => {
                 />
               }
               style={styles.input}
+              value={passwordField}
+              onChangeText={setPasswordField}
             />
+            {error && (
+              <Text style={[styles.errorText, { color: theme.colors.error }]}>
+                {error}
+              </Text>
+            )}
             <Button
-              onPress={hideModal}
+              onPress={handleLogin}
               mode="contained"
               style={styles.loginButton}
             >
@@ -245,6 +295,7 @@ const Header = () => {
               Введите свою почту или телефон, мы пришлём временный пароль
             </Text>
             <TextInput
+              autoCapitalize="none"
               placeholder="Логин"
               label={
                 <Text style={{ color: theme.colors.onBackground }}>
@@ -336,7 +387,8 @@ const Header = () => {
           </Dialog.Title>
           <Dialog.Content>
             <TextInput
-              placeholder="Имя"
+              autoCapitalize="none"
+              placeholder="Логин (Почта или телефон)"
               label={
                 <Text style={{ color: theme.colors.onBackground }}>
                   Логин (Почта или телефон)
@@ -350,9 +402,36 @@ const Header = () => {
               }}
               mode="outlined"
               style={styles.input}
+              value={loginField}
+              onChangeText={setLoginField}
             />
+            <TextInput
+              autoCapitalize="none"
+              placeholder="Пароль"
+              label={
+                <Text style={{ color: theme.colors.onBackground }}>Пароль</Text>
+              }
+              contentStyle={{ color: theme.colors.onBackground }}
+              theme={{ roundness: 10 }}
+              mode="outlined"
+              secureTextEntry={!showPassword}
+              right={
+                <TextInput.Icon
+                  icon={showPassword ? "eye-off" : "eye"}
+                  onPress={() => setShowPassword(!showPassword)}
+                />
+              }
+              style={styles.input}
+              value={passwordField}
+              onChangeText={setPasswordField}
+            />
+            {error && (
+              <Text style={[styles.errorText, { color: theme.colors.error }]}>
+                {error}
+              </Text>
+            )}
             <Button
-              onPress={showCompleteRegisterModal}
+              onPress={handleRegister}
               mode="contained"
               style={styles.loginButton}
             >
@@ -419,6 +498,13 @@ const styles = StyleSheet.create({
   logo: {
     marginTop: 10,
   },
+  profileButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   button: {
     borderRadius: 10,
   },
@@ -475,6 +561,12 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     marginTop: 5,
     fontSize: 16,
+    fontWeight: "500",
+    textAlign: "center",
+  },
+  errorText: {
+    marginBottom: 10,
+    fontSize: 14,
     fontWeight: "500",
     textAlign: "center",
   },

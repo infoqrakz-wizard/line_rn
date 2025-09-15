@@ -85,7 +85,6 @@ const CamerasScreen = () => {
 
   const [viewMode, setViewMode] = useState<1 | 2>(1);
   const [imageRefreshKey, setImageRefreshKey] = useState(0);
-  const [previousImageRefreshKey, setPreviousImageRefreshKey] = useState(0);
   const imageRefreshTimer = useRef<NodeJS.Timeout | null>(null);
 
   const ITEM_HEIGHT = React.useMemo(() => {
@@ -112,7 +111,6 @@ const CamerasScreen = () => {
 
   const refreshImages = useCallback(() => {
     setImageRefreshKey((prev) => {
-      setPreviousImageRefreshKey(prev);
       return prev + 1;
     });
   }, []);
@@ -457,23 +455,21 @@ const CamerasScreen = () => {
           key={`${imageRefreshKey}`}
           source={{
             uri: buildImageUrl(server!, camera),
-            expiresIn: isGridMode ? 10 : 600,
+            expiresIn: 5,
           }}
-          cacheKey={`camera-${camera.uri}-${camera.name}-${imageRefreshKey}`}
+          cacheKey={`camera-${camera.uri}-${camera.name}`}
           style={styles.backgroundImage}
           resizeMode="stretch"
           placeholderContent={
-            previousImageRefreshKey >= 0 ? (
-              <CachedImage
-                source={{
-                  uri: buildImageUrl(server!, camera),
-                  expiresIn: isGridMode ? 60 : 3600,
-                }}
-                cacheKey={`camera-${camera.uri}-${camera.name}-${previousImageRefreshKey}`}
-                style={styles.backgroundImage}
-                resizeMode="stretch"
-              />
-            ) : undefined
+            <CachedImage
+              source={{
+                uri: buildImageUrl(server!, camera),
+                expiresIn: 10,
+              }}
+              cacheKey={`camera-${camera.uri}-${camera.name}`}
+              style={styles.backgroundImage}
+              resizeMode="stretch"
+            />
           }
         />
 
@@ -555,7 +551,6 @@ const CamerasScreen = () => {
     const isGridMode = viewMode === 2;
 
     if (isPortrait || (isGridMode && camerasInRow.length <= 2)) {
-      // Portrait режим или Grid режим с 2 камерами в ряд
       return (
         <View style={[styles.rowContainer, { height: ITEM_HEIGHT }]}>
           {camerasInRow.map((camera, cameraIndex) => (
@@ -576,7 +571,6 @@ const CamerasScreen = () => {
         </View>
       );
     } else {
-      // Landscape режим с обычными камерами или Grid режим с 4 камерами в ряд
       return (
         <View style={[styles.rowContainer, { height: ITEM_HEIGHT }]}>
           {camerasInRow.map((camera, cameraIndex) => (
