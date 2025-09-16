@@ -119,7 +119,7 @@ const CamerasScreen = () => {
     (event: any) => {
       const { translationX, translationY, x, state } = event.nativeEvent;
       const screenWidth = Dimensions.get("window").width;
-      const isRightHalf = x > screenWidth * 0.5;
+      const isRightHalf = x > screenWidth;
 
       const isHorizontalGesture =
         Math.abs(translationX) > Math.abs(translationY);

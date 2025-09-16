@@ -132,7 +132,7 @@ export const fetchCameraList = async (
     const baseUrl = `${url}:${port}`;
     const camerasUrl = `${baseUrl}/cameras`;
 
-    const authString = createBasicAuthString(login, pass);
+    const authString = createBasicAuthString(login ?? "", pass ?? "");
     const authParam = `?authorization=Basic%20${encodeURIComponent(
       authString
     )}`;
@@ -215,7 +215,7 @@ export const buildStreamingUrl = (
 ): string => {
   const { url, port, login, pass } = server;
   const baseUrl = `${url}:${port}`;
-  const authString = createBasicAuthString(login, pass);
+  const authString = createBasicAuthString(login ?? "", pass ?? "");
   const authParam = `/${
     isMain ? "main" : "sub"
   }.mp4?authorization=Basic%20${encodeURIComponent(authString)}`;
@@ -226,7 +226,7 @@ export const buildStreamingUrl = (
 export const buildImageUrl = (server: Server, camera: Camera): string => {
   const { url, port, login, pass } = server;
   const baseUrl = `${url}:${port}`;
-  const authString = createBasicAuthString(login, pass);
+  const authString = createBasicAuthString(login ?? "", pass ?? "");
   const authParam = `?authorization=Basic%20${encodeURIComponent(authString)}`;
 
   return `${baseUrl}${camera.imageUri}${authParam}`;
@@ -241,7 +241,7 @@ export const fetchArchiveTimeline = async (
     const baseUrl = `${url}:${port}`;
     const rpcUrl = `${baseUrl}/rpc`;
 
-    const authString = createBasicAuthString(login, pass);
+    const authString = createBasicAuthString(login ?? "", pass ?? "");
     const authParam = `?authorization=Basic%20${encodeURIComponent(
       authString
     )}`;
@@ -361,7 +361,7 @@ export const getServerTime = async (server: Server): Promise<Date> => {
     const baseUrl = `${url}:${port}`;
     const rpcUrl = `${baseUrl}/rpc`;
 
-    const authString = createBasicAuthString(login, pass);
+    const authString = createBasicAuthString(login ?? "", pass ?? "");
     const authParam = `?authorization=Basic%20${encodeURIComponent(
       authString
     )}`;
@@ -387,14 +387,14 @@ export const getServerTime = async (server: Server): Promise<Date> => {
     const jsonResponse = await response.json();
 
     if (jsonResponse.error) {
-      throw new Error(`RPC Error: ${jsonResponse.error.type} - ${jsonResponse.error.message}`);
+      throw new Error(
+        `RPC Error: ${jsonResponse.error.type} - ${jsonResponse.error.message}`
+      );
     }
 
     const localTime = jsonResponse.result?.info?.local_time;
-    
+
     if (Array.isArray(localTime) && localTime.length >= 7) {
-      // local_time format: [year, month, day, hour, minute, second, millisecond]
-      // Note: JavaScript months are 0-indexed, but the API returns 1-indexed months
       const [year, month, day, hour, minute, second, millisecond] = localTime;
       return new Date(year, month - 1, day, hour, minute, second, millisecond);
     } else {
@@ -414,7 +414,7 @@ export const buildArchiveStreamingUrl = (
 ): string => {
   const { url, port, login, pass } = server;
   const baseUrl = `${url}:${port}`;
-  const authString = createBasicAuthString(login, pass);
+  const authString = createBasicAuthString(login ?? "", pass ?? "");
   const streamParam = isMain ? "main" : "sub";
 
   const streamType = "m3u8";
@@ -447,29 +447,18 @@ export const dateToTimeArray = (date: Date): number[] => {
   ];
 };
 
-// Интервалы масштабирования в миллисекундах (убрали 12 часов)
 export const TIMELINE_INTERVALS = [
-  5 * 60 * 1000,    // 5 минут
-  10 * 60 * 1000,   // 10 минут
-  15 * 60 * 1000,   // 15 минут
-  30 * 60 * 1000,   // 30 минут
-  60 * 60 * 1000,   // 1 час
-  4 * 60 * 60 * 1000, // 4 часа
-  6 * 60 * 60 * 1000, // 6 часов
-  24 * 60 * 60 * 1000 // 1 день
+  5 * 60 * 1000,
+  10 * 60 * 1000,
+  15 * 60 * 1000,
+  30 * 60 * 1000,
+  60 * 60 * 1000,
+  4 * 60 * 60 * 1000,
+  6 * 60 * 60 * 1000,
+  24 * 60 * 60 * 1000,
 ];
 
-// Длина единицы времени для каждого интервала (в секундах)
-export const UNIT_LENGTHS = [
-  5,    // 5 минут - 5 сек на фрагмент
-  10,   // 10 минут - 10 сек на фрагмент  
-  15,   // 15 минут - 15 сек на фрагмент
-  30,   // 30 минут - 30 сек на фрагмент
-  60,   // 1 час - 1 мин на фрагмент
-  240,  // 4 часа - 4 мин на фрагмент
-  360,  // 6 часов - 6 мин на фрагмент
-  1440  // 24 часов - 24 мин на фрагмент
-];
+export const UNIT_LENGTHS = [5, 10, 15, 30, 60, 240, 360, 1440];
 
 export interface TimeRange {
   start: Date;

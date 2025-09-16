@@ -147,6 +147,12 @@ const CreateServerModal: React.FC<CreateServerModalProps> = ({
                   mode="outlined"
                   style={styles.input}
                   left={<TextInput.Icon icon="server" />}
+                  contentStyle={{
+                    color: theme.colors.onBackground,
+                  }}
+                  theme={{
+                    roundness: 10,
+                  }}
                 />
 
                 <TextInput
@@ -159,6 +165,12 @@ const CreateServerModal: React.FC<CreateServerModalProps> = ({
                   keyboardType="url"
                   left={<TextInput.Icon icon="web" />}
                   placeholder="https://example.com"
+                  contentStyle={{
+                    color: theme.colors.onBackground,
+                  }}
+                  theme={{
+                    roundness: 10,
+                  }}
                 />
 
                 <TextInput
@@ -170,6 +182,12 @@ const CreateServerModal: React.FC<CreateServerModalProps> = ({
                   keyboardType="numeric"
                   left={<TextInput.Icon icon="lan-connect" />}
                   placeholder="443"
+                  contentStyle={{
+                    color: theme.colors.onBackground,
+                  }}
+                  theme={{
+                    roundness: 10,
+                  }}
                 />
 
                 <TextInput
@@ -180,6 +198,12 @@ const CreateServerModal: React.FC<CreateServerModalProps> = ({
                   style={styles.input}
                   autoCapitalize="none"
                   left={<TextInput.Icon icon="account" />}
+                  contentStyle={{
+                    color: theme.colors.onBackground,
+                  }}
+                  theme={{
+                    roundness: 10,
+                  }}
                 />
 
                 <TextInput
@@ -197,6 +221,12 @@ const CreateServerModal: React.FC<CreateServerModalProps> = ({
                       onPress={() => setShowPassword(!showPassword)}
                     />
                   }
+                  contentStyle={{
+                    color: theme.colors.onBackground,
+                  }}
+                  theme={{
+                    roundness: 10,
+                  }}
                 />
               </View>
 
