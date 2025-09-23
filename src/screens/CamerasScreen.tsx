@@ -117,20 +117,16 @@ const CamerasScreen = () => {
 
   const handlePanGesture = useCallback(
     (event: any) => {
-      const { translationX, translationY, x, state } = event.nativeEvent;
-      const screenWidth = Dimensions.get("window").width;
-      const isRightHalf = x > screenWidth;
+      const { translationX, translationY, state } = event.nativeEvent;
 
       const isHorizontalGesture =
         Math.abs(translationX) > Math.abs(translationY);
 
       if (state === 5 && isHorizontalGesture) {
-        if (isRightHalf) {
-          if (translationX > 50 && viewMode === 1) {
-            toggleViewMode();
-          } else if (translationX < -50 && viewMode === 2) {
-            toggleViewMode();
-          }
+        if (translationX > 50 && viewMode === 1) {
+          toggleViewMode();
+        } else if (translationX < -50 && viewMode === 2) {
+          toggleViewMode();
         }
       }
     },
